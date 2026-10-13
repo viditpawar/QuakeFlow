@@ -1,0 +1,38 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "generated": 1791878400000,
+    "title": "Synthetic sample, not real USGS data",
+    "count": 2
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "id": "example-quake-001",
+      "properties": {
+        "mag": 4.6,
+        "place": "Example seismic region A",
+        "time": 1791878100000,
+        "updated": 1791878280000,
+        "status": "automatic",
+        "type": "earthquake",
+        "tsunami": 0
+      },
+      "geometry": { "type": "Point", "coordinates": [-120.8, 36.5, 12.4] }
+    },
+    {
+      "type": "Feature",
+      "id": "example-quake-002",
+      "properties": {
+        "mag": null,
+        "place": "Example seismic region B",
+        "time": 1791878200000,
+        "updated": 1791878300000,
+        "status": "reviewed",
+        "type": "earthquake",
+        "tsunami": 0
+      },
+      "geometry": { "type": "Point", "coordinates": [-150.1, 61.2, 30.0] }
+    }
+  ]
+}
