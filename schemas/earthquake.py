@@ -6,11 +6,18 @@ may be negative: USGS reports depth relative to the reference surface, so shallo
 above-reference events are legitimate.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_ONE_MS = timedelta(milliseconds=1)
+
+
+def utc_to_epoch_ms(value: datetime) -> int:
+    """Aware datetime to integer epoch milliseconds (rounded down)."""
+    return (value - _EPOCH) // _ONE_MS
 
 
 def epoch_ms_to_utc(value: object) -> datetime:
@@ -53,3 +60,15 @@ class EarthquakeEvent(BaseModel):
     @classmethod
     def _to_utc(cls, value: datetime) -> datetime:
         return value.astimezone(UTC)
+
+    def to_json(self) -> str:
+        """JSON text with the source timestamps as epoch milliseconds, like USGS."""
+        data = self.model_dump(mode="python")
+        data["event_time"] = utc_to_epoch_ms(self.event_time)
+        data["source_updated_at"] = utc_to_epoch_ms(self.source_updated_at)
+        data["ingested_at"] = self.ingested_at.isoformat()
+        return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, text: str) -> "EarthquakeEvent":
+        return cls.model_validate(json.loads(text))

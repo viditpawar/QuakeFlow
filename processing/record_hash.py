@@ -11,9 +11,9 @@ HASH_VERSION if that is ever done on purpose.
 
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from schemas.earthquake import EarthquakeEvent
+from schemas.earthquake import EarthquakeEvent, utc_to_epoch_ms
 
 HASH_VERSION = 1
 
@@ -33,13 +33,10 @@ HASHED_FIELDS = (
 # must be listed in exactly one of the two tuples (enforced by a test).
 EXCLUDED_FIELDS = ("ingested_at", "record_hash")
 
-_ONE_MS = timedelta(milliseconds=1)
-
-
 def _canonical_value(value: object) -> object:
     if isinstance(value, datetime):
         # Integer epoch milliseconds: exact, and the same unit the source uses.
-        return (value - datetime(1970, 1, 1, tzinfo=value.tzinfo)) // _ONE_MS
+        return utc_to_epoch_ms(value)
     if isinstance(value, float) and value == 0.0:
         return 0.0  # -0.0 and 0.0 are the same measurement
     return value

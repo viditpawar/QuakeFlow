@@ -99,3 +99,12 @@ A record of the important decisions made on this project: what the situation was
 - **Decision:** SHA-256 of a canonical JSON of the normalized source fields (`event_id`, `event_time`, `source_updated_at`, `magnitude`, coordinates, `depth_km`, `place`, `review_status`, `event_type`) plus a `hash_version`. Timestamps are integer epoch milliseconds, `-0.0` is treated as `0.0`, and keys are sorted. `ingested_at` is excluded.
 - **Reasoning:** Hashing normalized fields, not the raw feature, means unrelated extra fields USGS adds to a feed (counts, URLs, network codes) cannot create false revisions. Excluding `ingested_at` means seeing the same record in both feeds gives the same hash.
 - **Consequences / trade-offs:** A real change in a field we do not hash (for example `tsunami` or `felt`) is not detected as a revision. Changing the field list or encoding changes every hash, so `HASH_VERSION` must be bumped. A test pins a known hash and checks that every model field is either hashed or explicitly excluded.
+
+### D-010: Change detector keeps every revision and classifies each new one
+- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Situation:** The collector must not re-publish unchanged records, must not lose a change if it crashes before Kafka confirms delivery, and must still pass late or conflicting revisions downstream so the versions table stays complete (D-005).
+- **Options considered:** Store only the last hash per event; store every revision with a delivered flag.
+- **Decision:** A SQLite table keyed by `(event_id, record_hash)` holding every revision seen, with its payload and a `published_at` that is set only after Kafka acknowledges it. A revision not seen before is recorded as pending and classified as `new`, `revised` (newer `source_updated_at`), `out_of_order` (older than one already known) or `conflict` (same `source_updated_at`, different content, logged). A revision already seen, pending or published, is ignored. `pending()` returns everything unconfirmed, including after a restart.
+- **Reasoning:** Keeping all revisions lets the detector tell a late revision from a new one, and storing the payload lets unconfirmed changes be retried after a crash.
+- **Consequences / trade-offs:** Delivery is at-least-once, because a crash between Kafka's acknowledgement and `mark_published` re-sends that revision. The table grows with every revision and needs a retention policy later. Out-of-order and conflicting revisions are still published, since the current-state merge, not the collector, decides which one wins.
