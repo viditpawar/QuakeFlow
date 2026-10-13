@@ -1,0 +1,28 @@
+# Environment and secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Local data (never commit real Citi Bike data)
+data/
+*.csv
+*.zip
+*.parquet
+
+# Docker volumes and local state
+volumes/
+checkpoints/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
