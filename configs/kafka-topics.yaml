@@ -1,25 +1,20 @@
-# Kafka topics for StreamLake. Single broker, so replication_factor must stay 1.
-# Status events are keyed by station_id so one station always lands in one partition.
+# Kafka topics for QuakeFlow. Single broker, so replication_factor must stay 1.
+# Events are keyed by the USGS event_id so all versions of one earthquake land in one
+# partition and keep their order.
 topics:
-  - name: citibike.station-status.raw
-    purpose: Raw station observations from the GBFS poller
+  - name: quakeflow.events.raw
+    purpose: Normalized earthquake observations from the USGS live poller
     partitions: 3
     replication_factor: 1
     retention_ms: 604800000   # 7 days
 
-  - name: citibike.station-status.validated
-    purpose: Observations that passed validation and deduplication
+  - name: quakeflow.events.validated
+    purpose: Observations that passed validation, deduplication, and revision detection
     partitions: 3
     replication_factor: 1
     retention_ms: 604800000
 
-  - name: citibike.station-availability.metrics
-    purpose: Aggregated station availability metrics from Flink
-    partitions: 3
-    replication_factor: 1
-    retention_ms: 604800000
-
-  - name: citibike.station-status.dlq
+  - name: quakeflow.events.dlq
     purpose: Invalid or unprocessable records kept for investigation and replay
     partitions: 1
     replication_factor: 1

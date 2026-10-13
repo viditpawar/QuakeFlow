@@ -1,9 +1,9 @@
-name: streamlake
+name: quakeflow
 
 services:
   kafka:
     image: apache/kafka:3.9.0
-    container_name: streamlake-kafka
+    container_name: quakeflow-kafka
     profiles: ["core"]
     ports:
       - "9092:9092"
