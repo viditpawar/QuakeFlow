@@ -12,13 +12,14 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "confluent-kafka>=2.5",
+    "pydantic>=2.7",
     "pyyaml>=6.0",
     "requests>=2.32",
 ]
 
 # Flat layout: each top-level package is listed explicitly. Add new ones here.
 [tool.setuptools.packages.find]
-include = ["ingestion*"]
+include = ["ingestion*", "schemas*", "processing*"]
 
 [tool.ruff]
 line-length = 100
