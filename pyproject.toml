@@ -1,15 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "quakeflow"
 version = "0.1.0"
 description = "Real-time and batch data platform for USGS earthquake events"
 readme = "README.md"
-requires-python = ">=3.11"
-license = { file = "LICENSE" }
+requires-python = ">=3.11,<3.13"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "confluent-kafka>=2.5",
     "pyyaml>=6.0",
     "requests>=2.32",
 ]
+
+# Flat layout: each top-level package is listed explicitly. Add new ones here.
+[tool.setuptools.packages.find]
+include = ["ingestion*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

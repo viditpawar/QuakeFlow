@@ -11,7 +11,7 @@ venv/
 .mypy_cache/
 *.egg-info/
 
-# Local data (never commit real Citi Bike data)
+# Local data (never commit downloaded USGS archives)
 data/
 *.csv
 *.zip

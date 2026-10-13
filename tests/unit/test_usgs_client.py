@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -8,7 +8,7 @@ import requests
 from ingestion.live.usgs_client import FeedError, UsgsLiveClient, parse_snapshot
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "usgs_all_hour_sample.geojson"
-NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 13, tzinfo=UTC)
 
 
 class FakeResponse:

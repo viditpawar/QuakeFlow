@@ -6,7 +6,7 @@ not a message stream, so callers should poll no faster than that.
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -72,7 +72,7 @@ class UsgsLiveClient:
             document = response.json()
         except (requests.RequestException, ValueError) as exc:
             raise FeedError(f"could not fetch {self.url}: {exc}") from exc
-        return parse_snapshot(document, datetime.now(timezone.utc))
+        return parse_snapshot(document, datetime.now(UTC))
 
 
 if __name__ == "__main__":
