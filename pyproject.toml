@@ -1,0 +1,17 @@
+[project]
+name = "streamlake"
+version = "0.1.0"
+description = "Real-time and batch data platform for NYC Citi Bike data"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+    "confluent-kafka>=2.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
