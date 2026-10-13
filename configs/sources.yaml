@@ -1,0 +1,15 @@
+# USGS feeds polled by the collector. Each feed runs on its own interval.
+# USGS rebuilds these snapshots about once a minute, so intervals under 60 seconds are
+# refused. A failing feed backs off exponentially (see ingestion/live/poller.py).
+feeds:
+  - name: all_hour
+    url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson
+    interval_seconds: 60
+    timeout_seconds: 15
+
+  # Catches events and revisions the hour feed missed. It cannot catch revisions made
+  # after an event leaves its one-day window; a longer-lookback reconciliation comes later.
+  - name: all_day
+    url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson
+    interval_seconds: 900
+    timeout_seconds: 30
