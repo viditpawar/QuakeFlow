@@ -38,6 +38,8 @@ class EarthquakeEvent(BaseModel):
     review_status: str | None = Field(default=None, strict=True)
     event_type: str | None = Field(default=None, strict=True)
     ingested_at: AwareDatetime
+    # SHA-256 of the source content, set by processing.normalize (see processing.record_hash).
+    record_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("event_time", "source_updated_at", mode="before")
     @classmethod

@@ -90,3 +90,12 @@ A record of the important decisions made on this project: what the situation was
 - **Decision:** A change counts as delivered only after Kafka confirms it. Detected but unconfirmed changes stay pending and are retried.
 - **Reasoning:** Protects against silent data loss across crashes and broker outages.
 - **Consequences / trade-offs:** Delivery is at-least-once, so downstream steps must tolerate duplicates, which the hash-based deduplication already does.
+
+### D-009: Record hash covers source content only
+- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Situation:** Revision detection and the same-timestamp tie-break both need a fingerprint that is identical whenever USGS says the same thing, and different whenever it says something different.
+- **Options considered:** Hash the raw feature JSON; hash a fixed set of normalized fields; hash including the local ingestion time.
+- **Decision:** SHA-256 of a canonical JSON of the normalized source fields (`event_id`, `event_time`, `source_updated_at`, `magnitude`, coordinates, `depth_km`, `place`, `review_status`, `event_type`) plus a `hash_version`. Timestamps are integer epoch milliseconds, `-0.0` is treated as `0.0`, and keys are sorted. `ingested_at` is excluded.
+- **Reasoning:** Hashing normalized fields, not the raw feature, means unrelated extra fields USGS adds to a feed (counts, URLs, network codes) cannot create false revisions. Excluding `ingested_at` means seeing the same record in both feeds gives the same hash.
+- **Consequences / trade-offs:** A real change in a field we do not hash (for example `tsunami` or `felt`) is not detected as a revision. Changing the field list or encoding changes every hash, so `HASH_VERSION` must be bumped. A test pins a known hash and checks that every model field is either hashed or explicitly excluded.

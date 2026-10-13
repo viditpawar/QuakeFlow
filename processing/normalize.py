@@ -10,6 +10,7 @@ from datetime import datetime
 
 from pydantic import ValidationError
 
+from processing.record_hash import compute_record_hash
 from schemas.earthquake import EarthquakeEvent
 
 
@@ -58,10 +59,11 @@ def normalize_feature(feature: object, ingested_at: datetime) -> EarthquakeEvent
         "ingested_at": ingested_at,
     }
     try:
-        return EarthquakeEvent.model_validate(candidate)
+        event = EarthquakeEvent.model_validate(candidate)
     except ValidationError as exc:
         reasons = [f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()]
         raise RecordRejected(reasons) from None
+    return event.model_copy(update={"record_hash": compute_record_hash(event)})
 
 
 def normalize_features(features: Iterable[object], ingested_at: datetime) -> NormalizationResult:
