@@ -244,7 +244,7 @@ def test_run_stops_after_max_polls():
 def test_main_once_polls_and_stores_state(tmp_path):
     db = tmp_path / "nested" / "state.db"
     code = main(
-        ["--config", str(ROOT / "configs" / "sources.yaml"), "--db", str(db), "--once"],
+        ["--config", str(ROOT / "configs" / "sources.yaml"), "--db", str(db), "--once", "--no-publish"],
         client_factory=lambda feed: FakeClient(fixture_features()),
     )
     assert code == 0
@@ -254,7 +254,14 @@ def test_main_once_polls_and_stores_state(tmp_path):
 
 def test_main_once_exits_nonzero_when_a_feed_fails(tmp_path):
     code = main(
-        ["--config", str(ROOT / "configs" / "sources.yaml"), "--db", str(tmp_path / "s.db"), "--once"],
+        [
+            "--config",
+            str(ROOT / "configs" / "sources.yaml"),
+            "--db",
+            str(tmp_path / "s.db"),
+            "--once",
+            "--no-publish",
+        ],
         client_factory=lambda feed: FakeClient(FeedError("down")),
     )
     assert code == 1

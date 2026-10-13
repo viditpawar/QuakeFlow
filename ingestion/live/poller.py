@@ -16,12 +16,13 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
 
 from ingestion.change_detector import Change, ChangeDetector
+from ingestion.kafka_publisher import KafkaPublisher, PublishReport, build_producer
 from ingestion.live.usgs_client import FeedError, UsgsLiveClient
 from processing.normalize import RejectedRecord, normalize_features
 
@@ -53,6 +54,11 @@ class PollResult:
     changes: list[Change] = field(default_factory=list)
     rejected: list[RejectedRecord] = field(default_factory=list)
     error: str | None = None
+    publish: PublishReport | None = None  # None when publishing is off
+
+    @property
+    def fully_delivered(self) -> bool:
+        return self.ok and (self.publish is None or self.publish.undelivered == 0)
 
 
 def load_feed_configs(path: str | Path) -> list[FeedConfig]:
@@ -115,15 +121,24 @@ class Poller:
         client_factory: Callable[[FeedConfig], object] = _default_client,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], object] | None = None,
+        publisher: KafkaPublisher | None = None,
     ):
         self.feeds = feeds
         self.detector = detector
+        self.publisher = publisher
         self._client_factory = client_factory
         self._clock = clock
         self._sleep = sleep
         self._clients: dict[str, object] = {}
 
     def poll_feed(self, feed: FeedConfig) -> PollResult:
+        """Poll one feed, then send anything owed to Kafka, including earlier leftovers."""
+        result = self._detect(feed)
+        if self.publisher is not None:
+            result = replace(result, publish=self.publisher.publish_pending())
+        return result
+
+    def _detect(self, feed: FeedConfig) -> PollResult:
         """One fetch, normalize and detect cycle. Fetch failures are returned, not raised."""
         client = self._clients.setdefault(feed.name, self._client_factory(feed))
         try:
@@ -181,11 +196,20 @@ class Poller:
             sleep(max(0.0, min(next_due.values()) - self._clock()))
 
 
-def main(argv: list[str] | None = None, client_factory=_default_client) -> int:
+def main(
+    argv: list[str] | None = None,
+    client_factory=_default_client,
+    producer_factory=build_producer,
+) -> int:
     parser = argparse.ArgumentParser(description="Poll the USGS earthquake feeds.")
     parser.add_argument("--config", default=os.getenv("QUAKEFLOW_SOURCES_CONFIG", DEFAULT_CONFIG))
     parser.add_argument("--db", default=os.getenv("QUAKEFLOW_STATE_DB", DEFAULT_DB))
     parser.add_argument("--once", action="store_true", help="poll every feed once and exit")
+    parser.add_argument(
+        "--no-publish",
+        action="store_true",
+        help="detect changes only; leave them pending and do not contact Kafka",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -197,10 +221,11 @@ def main(argv: list[str] | None = None, client_factory=_default_client) -> int:
 
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     with ChangeDetector(args.db) as detector:
-        poller = Poller(feeds, detector, client_factory)
+        publisher = None if args.no_publish else KafkaPublisher(detector, producer_factory())
+        poller = Poller(feeds, detector, client_factory, publisher=publisher)
         if args.once:
             results = poller.poll_all_once()
-            return 0 if all(result.ok for result in results) else 1
+            return 0 if all(result.fully_delivered for result in results) else 1
         stop = threading.Event()
         try:
             poller.run(stop)
