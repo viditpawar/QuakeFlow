@@ -101,3 +101,19 @@ Recovery took one poll after Kafka reported healthy (about 10 seconds).
 - The real Flink checkpoint-failure and consumer-lag series were present, but a real lag or checkpoint failure was not provoked in this phase.
 - Nothing was sent to anyone, because no Alertmanager runs.
 - The dashboard queries were run through the APIs and returned data, but the rendering in a browser was not inspected.
+
+## 2026-10-14: continuous integration, checked before pushing
+
+**What was run.** The steps of `ci.yml` in a clean Linux container with Python 3.11, started from a copy of the repository without the local virtual environment: install, `ruff check`, `pytest`, and `scripts/validate_config.py`. The Docker Compose and `promtool` steps had been run directly. The workflow files were linted with `actionlint`. The image checks from `docker-build.yml` were run against the images already built.
+
+| Check | Result |
+|---|---|
+| First clean install run | Failed. `prometheus_client` was imported by the code but not declared in `pyproject.toml`. It had been installed by hand in the local environment, so every local test had passed. |
+| After declaring it | 315 unit tests passed, ruff clean, 6 configuration checks with no problems. |
+| `actionlint` | Passed the real workflows. A deliberately broken workflow failed with two errors. |
+| Image checks | The Flink image contains the Kafka connector. The Spark image contains the Iceberg, Kafka and PostgreSQL jars and imports `yaml` and `prometheus_client`. |
+| New guard | A unit test reads every import in the code and fails if a package is not declared. With the declaration removed it failed and named the two files. |
+
+**Not a real CI run.** None of this ran on GitHub. A container with the same Python version is a close imitation of a hosted runner, and the first real run may still reveal a difference. An early false alarm from the container, every file looking executable, came from mounting a Windows folder, and git records no tracked file as executable, so it does not apply to a real checkout.
+
+**What CI does not cover.** The integration and recovery tests need Kafka, Flink, Spark and PostgreSQL running together and are run locally. The Docker image builds download about a gigabyte and were run once locally, not in CI.

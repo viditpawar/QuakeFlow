@@ -1,0 +1,43 @@
+name: Docker images
+
+# Builds the Flink and Spark images, which download about a gigabyte of base layers and several
+# jars. That is slow, so it runs only when something that affects the images changes, or on demand.
+# Each download is verified against a pinned SHA-256, so a build also checks that those are still right.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docker/**"
+      - "docker-compose.yml"
+      - "iceberg/catalog/**"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+      - "docker-compose.yml"
+      - "iceberg/catalog/**"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Flink and Spark images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: docker compose --profile streaming --profile batch build
+      - name: Flink image has the Kafka connector
+        run: docker run --rm --entrypoint sh quakeflow/flink:2.2.1 -c "ls /opt/flink/lib | grep flink-sql-connector-kafka"
+      - name: Spark image has Iceberg, Kafka and the Python packages it needs
+        run: |
+          docker run --rm --entrypoint sh quakeflow/spark:4.0.4 -c "ls /opt/spark/jars | grep -E 'iceberg-spark-runtime|iceberg-aws-bundle|postgresql|spark-sql-kafka|kafka-clients'"
+          docker run --rm --entrypoint python3 quakeflow/spark:4.0.4 -c "import yaml, prometheus_client; print('python packages ok')"

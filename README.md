@@ -1,107 +1,144 @@
-# QuakeFlow
+# QuakeFlow — Real-Time Earthquake Data Engineering Platform
 
-Real-time and batch data engineering platform for USGS earthquake events, built with Apache Kafka, Flink, PySpark, and Apache Iceberg, and run locally with Docker.
+[![CI](https://github.com/viditpawar/QuakeFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/viditpawar/QuakeFlow/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Status:** early development. Nothing here is a measured result yet.
+A streaming and batch data platform that ingests real USGS earthquake data, keeps every revision of each event, and maintains an Apache Iceberg lakehouse with quality-gated analytics. It runs on one laptop with Docker, uses no paid services, and needs no cloud account.
 
-QuakeFlow is a data infrastructure project. It is not an earthquake prediction or warning system.
+QuakeFlow is a data engineering project. It is not an earthquake prediction or warning system.
 
-## What it does
+## The problem it solves
 
-- Polls the live USGS earthquake GeoJSON feed and publishes new and revised events to Kafka.
-- Processes the stream with Flink (validation, deduplication, revision detection).
-- Backfills historical events from the USGS catalog API with PySpark.
-- Stores data in Bronze / Silver / Gold Apache Iceberg tables, keeping every observed revision of an event plus one current version.
-- Adds data quality gates, monitoring, and failure-recovery tests.
+USGS revises earthquakes after publishing them. An event first reported at magnitude 4.6 may later become 4.8, move a few kilometres, or change from "automatic" to "reviewed". A simple pipeline stores those as separate earthquakes and double counts them.
 
-## Data sources and notice
+QuakeFlow recognises that both records describe the same event. It keeps each revision, maintains one current version per event, and makes sure that a late or old record never overwrites a newer one. The same rule applies whether a record arrives from the live feed, a repeat delivery, or a historical backfill.
 
-- Live: USGS earthquake GeoJSON feeds (https://earthquake.usgs.gov/earthquakes/feed/)
-- Historical: USGS FDSN Event Web Service (https://earthquake.usgs.gov/fdsnws/event/1/)
+In a day of real data, 19 events were revised: 9 changed review status, 7 changed depth, 7 changed location, 7 changed event time and 5 changed magnitude. A pipeline that only watched magnitude would have missed most of them ([verification log](docs/verification-log.md)).
 
-USGS data is public, and no API key is needed. Credit USGS as the source. This repository contains code, schemas, docs, tests, and small synthetic fixtures only, and this project is not affiliated with or endorsed by USGS.
+## How it works
 
-## Running locally
+```mermaid
+flowchart LR
+    LIVE["USGS live feeds<br/>hour and day"] --> COL["Collector<br/>normalize, hash,<br/>detect changes"]
+    COL -->|"confirmed delivery"| RAW[("Kafka<br/>events.raw")]
+    RAW --> FLINK["Flink<br/>validate and deduplicate"]
+    FLINK --> VAL[("Kafka<br/>events.validated")]
+    FLINK --> DLQ[("Kafka<br/>events.dlq")]
+    VAL --> LOAD["Spark load<br/>idempotent merges"]
+    DLQ --> LOAD
+    CAT["USGS catalog API"] --> BF["Backfill<br/>windows and manifests"]
+    BF --> HLOAD["Spark historical load"]
+    LOAD --> LAKE
+    HLOAD --> LAKE
+    subgraph LAKE ["Iceberg lakehouse: PostgreSQL catalog, RustFS storage"]
+        direction LR
+        BRONZE["Bronze<br/>as received"] --> SILVER["Silver<br/>versions and current"] --> GOLD["Gold<br/>quality gate"]
+    end
+    MON["Prometheus and Grafana"] -.-> COL
+    MON -.-> FLINK
+    MON -.-> LOAD
+```
 
-Windows PowerShell, Python 3.11, Docker Desktop. Run from the repository root.
+1. **Collector** polls two USGS feeds on separate schedules, validates each record, fingerprints its content, and remembers which revisions it has seen in SQLite. A revision counts as sent only after Kafka confirms it, so a crash or an outage delays data and never loses it.
+2. **Flink** validates and deduplicates the stream with exactly-once output. Bad records go to a dead-letter topic with the reason, and a late older revision is still kept as a version.
+3. **Spark** loads Kafka into Iceberg with merges that are safe to repeat. Silver holds every revision plus one current row per event.
+4. **Backfill** downloads historical windows from the catalog API, splitting any window over the service's 20,000-event limit, and records a checksummed manifest per window so it can resume.
+5. **Gold** analytics are rebuilt behind a quality gate. If any check fails, nothing is published and the previous tables stay in place.
+
+More detail, including what each hop guarantees, is in [docs/architecture.md](docs/architecture.md). The reasoning behind each major choice is in [decisions.md](decisions.md).
+
+## What is in it
+
+| Area | What |
+|---|---|
+| Ingestion | Python collector, Pydantic validation, deterministic record hash, SQLite change detector, Kafka publisher |
+| Streaming | Apache Kafka (KRaft), Apache Flink SQL with checkpoints and exactly-once sinks |
+| Batch | PySpark jobs, Iceberg Bronze / Silver / Gold tables, historical backfill |
+| Quality | Declarative quality contract, write-audit-publish gate, reconciliation of every Gold table against Silver |
+| Operations | Prometheus metrics and alerts, Grafana dashboard, recovery runbook, failure-injection tests |
+| Delivery | Docker Compose profiles, GitHub Actions, version-pinned and checksum-verified downloads |
+
+Versions: Kafka 3.9.0, Flink 2.2.1, Spark 4.0.4, Iceberg 1.12.0, PostgreSQL 17, RustFS 1.0.0, Python 3.11.
+
+## Quick start
+
+You need Docker Desktop, Python 3.11 and about 16 GB of RAM. Everything runs on localhost. These are PowerShell commands, run from the repository root.
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 
-docker compose --profile core up -d          # Kafka (KRaft, single broker)
-python infrastructure\kafka\create_topics.py # first time only; safe to repeat
-python -m ingestion.live.poller              # poll both USGS feeds and publish to Kafka
+docker compose --profile core up -d            # Kafka
+python infrastructure\kafka\create_topics.py   # first time only
+python -m ingestion.live.poller --once         # poll both feeds once and publish to Kafka
 ```
 
-Useful flags for the poller: `--once` polls every feed a single time and exits (non-zero if Kafka did not confirm everything), and `--no-publish` only detects changes without contacting Kafka. Feed URLs and intervals are in `configs/sources.yaml`. Collector state is kept in a local SQLite file (`data/quakeflow_state.db` by default), which is not committed.
+Then add Flink, the lakehouse, backfills, Gold and monitoring as you like. [docs/running.md](docs/running.md) has every command. With everything running, the containers used about 2.3 GB when idle (measured), and a Spark job adds up to its 2 GB limit while it runs. The services are split into Compose profiles (`core`, `streaming`, `batch`, `monitoring`) so you can run only the ones you need.
 
-Stream processing (Flink 2.2.1, adds about 1.5 GB of RAM) runs under a separate profile, together with Kafka:
+## Tests
 
 ```powershell
-docker compose --profile core --profile streaming up -d --build
-docker exec quakeflow-flink-jobmanager ./bin/sql-client.sh -i /opt/flink/sql/kafka_sources.sql -f /opt/flink/sql/smoke_count.sql
+python -m pytest                       # about 300 unit tests, a few seconds
+python -m ruff check .                 # lint
+python scripts\validate_config.py      # configuration files, dashboards, contracts
 ```
 
-Start the validation and deduplication job (reads `quakeflow.events.raw`, writes `quakeflow.events.validated` and `quakeflow.events.dlq`):
+Eleven integration and recovery tests run against the real Kafka, Flink, Spark and Iceberg, and need the stack running. Run them with `python -m pytest -m integration`. Each takes between one and ten minutes. They kill a Flink worker mid-stream, interrupt a Spark load, feed corrupt records through, and break the data quality gate on purpose. Where a test was meant to catch a failure, it was also run against a deliberately broken version to confirm it fails.
 
-```powershell
-docker exec quakeflow-flink-jobmanager sh -c "cat /opt/flink/sql/kafka_sources.sql /opt/flink/sql/validated_events.sql /opt/flink/sql/revision_tracking.sql > /tmp/job.sql && ./bin/sql-client.sh -f /tmp/job.sql"
-```
-
-The sinks are exactly-once, so anything reading the output topics must use `isolation.level=read_committed`. The Flink web UI is at http://localhost:8081. Cancel the job there, or with `curl -X PATCH "localhost:8081/jobs/<job id>?mode=cancel"` inside the jobmanager container.
-
-The integration and recovery tests run the real job on throwaway topics (they need the stack running): `python -m pytest -m integration tests/integration tests/recovery`. See [docs/recovery-runbook.md](docs/recovery-runbook.md) for failure recovery.
-
-Lakehouse (PostgreSQL catalog, RustFS object storage, Spark 4.0 and Iceberg), separate profile:
-
-```powershell
-docker compose --profile batch up -d postgres rustfs
-python infrastructure\storage\create_bucket.py   # first time only; safe to repeat
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -f /workspace/iceberg/sql/001_create_namespaces.sql
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SHOW NAMESPACES"
-```
-
-Spark runs as a one-off container per command, so it uses memory only while a job runs. The RustFS console is at http://localhost:9001. Default credentials are local-only and can be changed in `.env` (see `.env.example`).
-
-Load Kafka into the lakehouse (Bronze, Silver versions, Silver current state, rejected records). Each run reads what is new and exits, so run it again whenever you want the lakehouse brought up to date. Kafka and the lakehouse must be running:
-
-```powershell
-docker compose --profile core --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/ingest_live.py
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELECT event_id, magnitude, place, event_time FROM local.silver.earthquakes_current ORDER BY event_time DESC LIMIT 20"
-```
-
-Running the job twice, or after deleting its checkpoint, leaves the tables unchanged. Integration tests for it: `python -m pytest -m integration tests/integration/test_ingest_live.py` (about 6 minutes).
-
-Backfill historical events from the USGS catalog (start inclusive, end exclusive, UTC). Re-running the same command skips windows that are already complete, and windows over the service's 20,000-event limit are split automatically:
-
-```powershell
-python -m batch.backfill --start 2025-01-01 --end 2025-01-08 --min-magnitude 2.5
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/ingest_history.py
-```
-
-The first command writes a raw download, normalized files and a manifest per window under `data/history/` (not committed). The second merges the completed windows into the lakehouse. Loading twice, or loading overlapping ranges, leaves the tables unchanged, and an older revision never replaces a newer current one. Integration tests: `python -m pytest -m integration tests/integration/test_ingest_history.py` (about 6 minutes).
-
-Build the Gold analytics tables from Silver. The job audits the data against `configs/quality.yaml` first and publishes only if every check passes. If any check fails, Gold is left untouched, the exit code is 1, and the attempt is recorded in `gold.build_log`:
-
-```powershell
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/build_gold.py
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELECT status, checks_failed, failed_checks FROM local.gold.build_log ORDER BY built_at DESC LIMIT 5"
-```
-
-Gold tables: `daily_seismic_activity`, `regional_activity`, `magnitude_distribution`, `revision_statistics` and `ingestion_latency` (definitions and caveats in [docs/data-dictionary.md](docs/data-dictionary.md)). Integration tests (the gate test takes about 10 minutes): `python -m pytest -m integration tests/integration/test_build_gold.py`. Note that the Spark image runs Python 3.10, so code in `batch/` that runs there must not use 3.11-only features, and a unit test checks this.
-
-Monitoring (Prometheus, Grafana, Pushgateway, Kafka lag exporter). The collector serves metrics on http://127.0.0.1:9108/metrics while it runs. Set `PUSHGATEWAY_URL` to let the Spark jobs report their results. See [docs/monitoring.md](docs/monitoring.md) for the metrics and alerts:
-
-```powershell
-docker compose --profile core --profile streaming --profile batch --profile monitoring up -d
-$env:PUSHGATEWAY_URL = "http://pushgateway:9091"
-# Grafana: http://localhost:3000 (admin / quakeflow-local)   Prometheus: http://localhost:9090
-```
-
-Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
+GitHub Actions runs the lint, unit tests, configuration validation, Compose validation and alert-rule tests on every push. It builds the Docker images when files that affect them change. The heavy integration tests are not run there, because they need several gigabytes of memory.
 
 ## Repository layout
 
-The layout grows as features are built. See [decisions.md](decisions.md) for the reasoning behind project choices.
+```
+ingestion/        collector: USGS clients, change detector, Kafka publisher, metrics
+schemas/          the earthquake event model
+processing/       normalization and record hashing
+batch/            Spark jobs, historical backfill, quality gate
+flink/sql/        the streaming job, written in Flink SQL
+iceberg/          table definitions, merge statements, Spark catalog settings
+configs/          feed list, Kafka topics, data quality contract
+monitoring/       Prometheus rules, Grafana dashboard and provisioning
+docker/           Flink and Spark images
+infrastructure/   topic and bucket creation scripts
+scripts/          configuration validation
+tests/            unit, integration and recovery tests
+docs/             architecture, data dictionary, monitoring, runbook, verification log
+decisions.md      the design decisions and their reasoning
+```
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Data flow, guarantees at each step, resource use |
+| [docs/running.md](docs/running.md) | Every command for running and operating the platform |
+| [docs/data-dictionary.md](docs/data-dictionary.md) | Every table and column, and how the analytics are defined |
+| [docs/monitoring.md](docs/monitoring.md) | Metrics, dashboard and alerts |
+| [docs/recovery-runbook.md](docs/recovery-runbook.md) | What survives each failure, and how to recover |
+| [docs/verification-log.md](docs/verification-log.md) | What was run on real data, what it showed, and what it did not show |
+| [decisions.md](decisions.md) | Design decisions, the options considered, and the trade-offs |
+
+## Limitations
+
+Stated plainly, because they affect how far the results can be trusted:
+
+- It is a single-machine learning and portfolio project. There is one Kafka broker, one Flink TaskManager and no JobManager high availability, so it is not fault tolerant against losing a machine.
+- Delivery is at-least-once. Duplicates are removed by content hash, so the results are correct, but a revision can be sent twice.
+- The Spark load and Gold build are run by hand or on a schedule you set. Data reaches the lakehouse only when they run.
+- The lakehouse tables can disagree briefly while a load is running, because each table is a separate commit. They are consistent once a load completes.
+- Revisions that USGS makes after an event leaves the one-day feed are not seen yet. A scheduled reconciliation job is planned in [decisions.md](decisions.md) (D-003) and not built.
+- The USGS catalog returns each event's current state, so a backfill cannot recover earlier revisions.
+- The lakehouse holds only what has been loaded so far. Gold analytics describe that data and not the whole USGS catalog, and periods loaded with different magnitude filters are not directly comparable.
+- No performance benchmarks have been made. The measurements that exist are in the verification log.
+
+## Data sources and notice
+
+- Live: USGS earthquake GeoJSON feeds, https://earthquake.usgs.gov/earthquakes/feed/
+- Historical: USGS FDSN Event Web Service, https://earthquake.usgs.gov/fdsnws/event/1/
+
+USGS data is public and needs no API key. Credit USGS as the source. This repository contains code, schemas, documentation, tests and small synthetic fixtures only, and this project is not affiliated with or endorsed by USGS.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

@@ -1,0 +1,67 @@
+name: CI
+
+# Fast checks that run on every push and pull request. The heavy tests that need Kafka, Flink and
+# Spark running together are not run here: they take many minutes and a lot of memory, so run them
+# locally before pushing (see the README). Building the Docker images is in docker-build.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Unit tests
+        # Integration and recovery tests are deselected by the pytest settings in pyproject.toml.
+        run: pytest -q
+
+  validate:
+    name: Validate configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Configuration files, dashboards and contracts
+        run: python scripts/validate_config.py
+      - name: Docker Compose file, every profile
+        run: docker compose --profile core --profile streaming --profile batch --profile monitoring config --quiet
+      - name: Alert rules are valid
+        run: >
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring:/work:ro"
+          prom/prometheus:v3.15.0 check rules /work/alerts.yml
+      - name: Alert rules fire when they should
+        run: >
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring:/work:ro"
+          prom/prometheus:v3.15.0 test rules /work/alerts_test.yml
