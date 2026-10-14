@@ -52,7 +52,7 @@ docker exec quakeflow-flink-jobmanager sh -c "cat /opt/flink/sql/kafka_sources.s
 
 The sinks are exactly-once, so anything reading the output topics must use `isolation.level=read_committed`. The Flink web UI is at http://localhost:8081. Cancel the job there, or with `curl -X PATCH "localhost:8081/jobs/<job id>?mode=cancel"` inside the jobmanager container.
 
-The integration test runs the real job on throwaway topics (needs the stack running): `python -m pytest -m integration tests/integration`.
+The integration and recovery tests run the real job on throwaway topics (they need the stack running): `python -m pytest -m integration tests/integration tests/recovery`. See [docs/recovery-runbook.md](docs/recovery-runbook.md) for failure recovery.
 
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
