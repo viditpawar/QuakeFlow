@@ -59,6 +59,7 @@ Each row was tested by injecting the failure and checking the data afterwards. T
 | Failure | Result |
 |---|---|
 | Kafka down while the collector runs | Revisions stay pending and are sent after recovery. 8 of 8 events arrived once. |
+| Kafka down for several minutes | The Flink job keeps retrying and resumes by itself. After a 6 minute outage it was caught up 28 seconds after Kafka was healthy. |
 | Flink TaskManager killed mid-stream | The job restores from a checkpoint. No loss, no duplicates. |
 | Flink job cancelled and resubmitted | Restoring from the retained checkpoint keeps the deduplication state. Without it, every revision is emitted again. |
 | Spark load killed part way | Tables can disagree until the retry, then are exactly right. |

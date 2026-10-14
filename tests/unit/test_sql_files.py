@@ -143,3 +143,24 @@ def test_every_gold_table_is_created_before_the_build_writes_to_it():
 def test_historical_bronze_and_rejected_merges_are_null_safe_on_event_id():
     text = "\n".join(load_statements(SQL_DIR / "003_merge_history.sql"))
     assert text.count("t.event_id <=> s.event_id") == 2
+
+
+def _flink_settings() -> dict[str, str]:
+    import re
+
+    text = (SQL_DIR.parents[1] / "flink" / "sql" / "revision_tracking.sql").read_text(encoding="utf-8")
+    return dict(re.findall(r"SET '([^']+)' = '([^']*)'", text))
+
+
+def test_the_flink_job_retries_without_a_limit_so_it_survives_a_long_outage():
+    # A fixed limit of 10 attempts once left the job failed for 50 minutes after a Kafka outage (D-023).
+    settings = _flink_settings()
+    assert settings["restart-strategy.type"] == "exponential-delay"
+    assert not any(key.startswith("restart-strategy.fixed-delay") for key in settings)
+    assert not any("attempts" in key for key in settings if key.startswith("restart-strategy."))
+
+
+def test_the_flink_retry_delay_is_capped_so_recovery_after_an_outage_is_quick():
+    settings = _flink_settings()
+    assert settings["restart-strategy.exponential-delay.max-backoff"] in {"30 s", "1 min", "60 s"}
+    assert settings["restart-strategy.exponential-delay.initial-backoff"] == "10 s"

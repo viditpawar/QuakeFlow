@@ -9,7 +9,7 @@ How to recover the streaming part of QuakeFlow, and what was measured. Timings a
 |---|---|---|
 | TaskManager container dies | The job restarts by itself from the latest checkpoint once a TaskManager is back. | None (tested) |
 | Job cancelled or JobManager lost | Resubmit the job from the retained checkpoint (below). | None (tested) |
-| Kafka stopped | The collector keeps unconfirmed revisions pending and sends them when Kafka returns. Flink retries until Kafka is back. | None (collector tested) |
+| Kafka stopped | The collector keeps unconfirmed revisions pending and sends them when Kafka returns. The Flink job keeps retrying, with a delay that grows to one minute, and resumes by itself. | None (both tested) |
 | Spark load killed part way | Run the load again. Each table is a separate Iceberg commit, so tables can disagree with each other until the retry finishes (see below). | None (tested) |
 | Checkpoint volume deleted | The job can only start fresh from `earliest-offset`. Output is reprocessed, so downstream must tolerate repeats. | Repeats possible |
 
@@ -29,7 +29,7 @@ docker exec quakeflow-flink-jobmanager curl -s localhost:8081/jobs/overview
 docker exec quakeflow-flink-jobmanager curl -s localhost:8081/jobs/<job id>/checkpoints
 ```
 
-`latest.restored` shows which checkpoint it resumed from. The job allows 10 restart attempts, 10 seconds apart.
+`latest.restored` shows which checkpoint it resumed from. The job retries without a limit on the number of attempts: 10 seconds after the first failure, doubling up to one minute between tries. A fixed limit of 10 attempts was used at first and was wrong, because the job gave up for good after a few minutes of outage and stayed failed after Kafka returned (D-023).
 
 ## Resubmit from a retained checkpoint
 

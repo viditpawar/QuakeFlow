@@ -10,9 +10,18 @@ SET 'parallelism.default' = '1';
 SET 'execution.checkpointing.interval' = '10 s';
 SET 'execution.checkpointing.mode' = 'EXACTLY_ONCE';
 SET 'execution.checkpointing.externalized-checkpoint-retention' = 'RETAIN_ON_CANCELLATION';
-SET 'restart-strategy.type' = 'fixed-delay';
-SET 'restart-strategy.fixed-delay.attempts' = '10';
-SET 'restart-strategy.fixed-delay.delay' = '10 s';
+
+-- If the job fails, for example because Kafka is down, retry for as long as it takes: 10 seconds
+-- after the first failure, doubling each time up to 1 minute between tries, with no limit on the
+-- number of tries. A fixed limit made the job give up for good after a few minutes of outage
+-- and stay failed even once Kafka was back. The 1 minute cap means that once Kafka returns the
+-- job notices within about a minute. The delay resets after 10 minutes without a failure.
+SET 'restart-strategy.type' = 'exponential-delay';
+SET 'restart-strategy.exponential-delay.initial-backoff' = '10 s';
+SET 'restart-strategy.exponential-delay.max-backoff' = '1 min';
+SET 'restart-strategy.exponential-delay.backoff-multiplier' = '2.0';
+SET 'restart-strategy.exponential-delay.reset-backoff-threshold' = '10 min';
+SET 'restart-strategy.exponential-delay.jitter-factor' = '0.1';
 
 -- Remember which revisions were seen for 7 days, the same as the raw topic's retention.
 SET 'table.exec.state.ttl' = '7 d';

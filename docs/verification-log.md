@@ -97,7 +97,7 @@ Recovery took one poll after Kafka reported healthy (about 10 seconds).
 **Memory with everything running** (Kafka, Flink, PostgreSQL, RustFS, and the monitoring containers): Kafka 443 MB, Flink 470 and 629 MB, RustFS 488 MB, PostgreSQL 44 MB, Grafana 119 MB, Prometheus 67 MB, Pushgateway 23 MB, exporter 19 MB. Spark ran only while a job ran. Host free memory was 3.9 GB of 15.7 GB.
 
 **What this does not show.**
-- The alerts were tested against made-up data, and none was seen firing on real data. The 10 minute `for` periods were not waited out.
+- The alerts were tested against made-up data. One of them later fired on real data (see the entry on the failed Flink job below), but the 10 minute `for` periods were not waited out in a test.
 - The real Flink checkpoint-failure and consumer-lag series were present, but a real lag or checkpoint failure was not provoked in this phase.
 - Nothing was sent to anyone, because no Alertmanager runs.
 - The dashboard queries were run through the APIs and returned data, but the rendering in a browser was not inspected.
@@ -117,3 +117,26 @@ Recovery took one poll after Kafka reported healthy (about 10 seconds).
 **Not a real CI run.** None of this ran on GitHub. A container with the same Python version is a close imitation of a hosted runner, and the first real run may still reveal a difference. An early false alarm from the container, every file looking executable, came from mounting a Windows folder, and git records no tracked file as executable, so it does not apply to a real checkout.
 
 **What CI does not cover.** The integration and recovery tests need Kafka, Flink, Spark and PostgreSQL running together and are run locally. The Docker image builds download about a gigabyte and were run once locally, not in CI.
+
+## 2026-10-14: the Flink job failed and stayed failed, and the fix
+
+**What happened.** After the first Kafka outage drill, the real Flink job was in state FAILED and had been since 13:36, about 50 minutes. The cause, from the job's own exception history: *"Recovery is suppressed by FixedDelayRestartBackoffTimeStrategy(maxNumberRestartAttempts=10, backoffTimeMS=10000)"*. The job had been told to retry 10 times, 10 seconds apart. A Kafka outage of about 10 minutes used those up within a few minutes, and the job never came back when Kafka did. It was found when the Flink web UI was looked at. The last lines of my own drill script, which printed the job state, had not been read.
+
+**What the monitoring did.** The `FlinkNoRunningJob` alert fired from 13:41 to 14:27, five minutes after the failure, as its rule says, and stopped when the job was resubmitted. `FlinkCheckpointsFailing` and `CollectorDown` also fired during the drills. The Grafana panel "Kafka consumer lag" was showing 10 (the backlog of 10 messages). So the rules and the dashboard worked, and nobody saw them, because nothing sends alerts anywhere and the alerts page was not being watched.
+
+**Data impact.** None lost. The failed job's checkpoint (chk-722) was kept, the job was resubmitted from it, and the backlog was processed. The topic counts before the fix were 453 raw and 443 validated.
+
+**The fix.** The restart strategy was changed to retry without a limit, with the delay growing from 10 seconds to a cap of 1 minute (D-023). A first choice of a 5 minute cap was changed to 1 minute, because it could leave the job waiting up to 5 minutes after Kafka returned.
+
+**Verification.** Kafka was stopped for 6 minutes with the real job running, which is longer than the old setting survived.
+
+| Moment | Result |
+|---|---|
+| About 90 s after the stop | Job state RESTARTING |
+| 6 minutes after the stop | Still RESTARTING, not FAILED |
+| About 15 s after Kafka was healthy | Back to RUNNING, the same job, with no intervention |
+| 28 s after Kafka was healthy | Caught up: 456 messages in the raw topic and 456 in the validated topic |
+
+**What this does not show.** It is one drill with one outage length and was not repeated. It is a manual drill and not an automated test, because stopping the shared Kafka disrupts everything else running. An automated unit test only checks that the strategy is configured with no attempt limit. A job that fails for a reason that never fixes itself will now retry forever instead of stopping, and shows only as RESTARTING.
+
+**Also changed.** The Grafana count panels "Events ingested" and "New revisions" were showing in red and with a decimal because of Grafana's default thresholds. They are now neutral blue and whole numbers. Series from the drills (a feed called "drill") remain in the charts until Prometheus's retention removes them.

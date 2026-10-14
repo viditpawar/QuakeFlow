@@ -95,6 +95,7 @@ Each row below was tested by causing the failure and then checking the data. Sev
 | The same revision is sent many times | One accepted current row |
 | An older revision arrives after a newer one | The newer one stays current, and the older is kept as history |
 | Kafka goes down while the collector runs | Revisions wait and are delivered after recovery: 8 of 8 arrived, once each |
+| Kafka is down for six minutes | The Flink job keeps retrying and resumes on its own, caught up 28 seconds after Kafka returned |
 | A Flink worker is killed mid-stream | The job restores from its checkpoint: 400 of 400 revisions, once each |
 | A Flink job is cancelled and restarted | State is restored from the checkpoint. Without it, every revision is emitted again |
 | A Spark load is killed part way | Tables can disagree until the retry, then are exactly right |
