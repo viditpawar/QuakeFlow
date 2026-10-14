@@ -39,6 +39,15 @@ def stack_is_up() -> bool:
         return False
 
 
+def stack_is_up_kafka() -> bool:
+    """Kafka alone, for tests that do not need Flink."""
+    try:
+        AdminClient({"bootstrap.servers": BOOTSTRAP}).list_topics(timeout=3)
+        return True
+    except KafkaException:
+        return False
+
+
 # --- messages -----------------------------------------------------------------------------
 
 

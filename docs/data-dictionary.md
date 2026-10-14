@@ -54,3 +54,12 @@ Records that failed validation. Columns: `rejected_at`, `stage` (flink, spark or
 - `depth_km` can be negative: depth is relative to a reference surface, so shallow events can sit above it.
 - `event_type` includes more than earthquakes (quarry blasts, explosions and others). Earthquake analytics filter on `event_type = 'earthquake'` (D-004).
 - `review_status` is `automatic` until USGS reviews the event.
+
+## How the tables are loaded
+
+`batch/ingest_live.py` fills the live tables from Kafka, using the statements in `iceberg/sql/003_merge_current.sql` and `003_merge_flink_rejected.sql`:
+
+- Every message goes to `bronze.live_observations`, valid or not.
+- Valid messages add a row to `silver.earthquake_versions` if that `(event_id, record_hash)` is new.
+- `silver.earthquakes_current` takes the newest revision of each event. A later-arriving older revision does not replace it.
+- Messages that fail validation go to `silver.rejected_records` with `stage = 'spark'`. Records Flink rejected are read from the dead-letter topic with `stage = 'flink'`.

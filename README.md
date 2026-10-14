@@ -65,6 +65,15 @@ docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SHOW 
 
 Spark runs as a one-off container per command, so it uses memory only while a job runs. The RustFS console is at http://localhost:9001. Default credentials are local-only and can be changed in `.env` (see `.env.example`).
 
+Load Kafka into the lakehouse (Bronze, Silver versions, Silver current state, rejected records). Each run reads what is new and exits, so run it again whenever you want the lakehouse brought up to date. Kafka and the lakehouse must be running:
+
+```powershell
+docker compose --profile core --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/ingest_live.py
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELECT event_id, magnitude, place, event_time FROM local.silver.earthquakes_current ORDER BY event_time DESC LIMIT 20"
+```
+
+Running the job twice, or after deleting its checkpoint, leaves the tables unchanged. Integration tests for it: `python -m pytest -m integration tests/integration/test_ingest_live.py` (about 6 minutes).
+
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
 ## Repository layout

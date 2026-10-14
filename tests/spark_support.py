@@ -26,3 +26,27 @@ def lakehouse_is_up() -> bool:
         ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, check=False
     ).stdout.split()
     return "quakeflow-postgres" in names and "quakeflow-rustfs" in names
+
+
+def run_ingest(
+    topic: str, dlq_topic: str, bronze: str, silver: str, checkpoint: str, timeout: int = 900
+) -> str:
+    """Run batch/ingest_live.py once in the Spark container. Returns its log output."""
+    result = subprocess.run(
+        ["docker", "compose", "--profile", "core", "--profile", "batch", "run", "--rm", "-T",
+         "spark", "/opt/spark/bin/spark-submit", "/workspace/batch/ingest_live.py",
+         "--topic", topic, "--dlq-topic", dlq_topic, "--bronze-ns", bronze,
+         "--silver-ns", silver, "--checkpoint-dir", checkpoint],
+        cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"ingest failed:\n{result.stdout[-1500:]}\n{result.stderr[-4000:]}")
+    return result.stderr
+
+
+def remove_checkpoint(path: str) -> None:
+    subprocess.run(
+        ["docker", "compose", "--profile", "batch", "run", "--rm", "-T", "--entrypoint", "rm",
+         "spark", "-rf", path],
+        cwd=ROOT, capture_output=True, text=True, timeout=300, check=False,
+    )

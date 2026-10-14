@@ -20,7 +20,7 @@ dependencies = [
 
 # Flat layout: each top-level package is listed explicitly. Add new ones here.
 [tool.setuptools.packages.find]
-include = ["ingestion*", "schemas*", "processing*"]
+include = ["ingestion*", "schemas*", "processing*", "batch*"]
 
 [tool.ruff]
 line-length = 100

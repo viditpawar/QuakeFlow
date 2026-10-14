@@ -150,9 +150,14 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-quakeflow}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-quakeflow-local-secret}
       WAREHOUSE_BUCKET: ${WAREHOUSE_BUCKET:-warehouse}
+      # Kafka's internal listener. Start Kafka too (core profile) for jobs that read topics.
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      PYTHONPATH: /workspace
     volumes:
       - ./iceberg/catalog:/opt/quakeflow/conf:ro
       - ./iceberg/sql:/workspace/iceberg/sql:ro
+      - ./batch:/workspace/batch:ro
+      - spark-checkpoints:/checkpoints
     mem_limit: 2g
 
 volumes:
@@ -160,3 +165,4 @@ volumes:
   flink-checkpoints:
   postgres-data:
   rustfs-data:
+  spark-checkpoints:
