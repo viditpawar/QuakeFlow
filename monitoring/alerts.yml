@@ -1,0 +1,69 @@
+# Alert rules. Prometheus evaluates them and shows them at http://localhost:9090/alerts.
+# No Alertmanager is run, so nothing is sent anywhere: these are for looking at, not for paging.
+# Thresholds are starting points for a local setup. Tune them once there is a baseline.
+groups:
+  - name: collector
+    rules:
+      - alert: CollectorDown
+        expr: up{job="quakeflow-collector"} == 0
+        for: 3m
+        annotations:
+          summary: The collector's metrics endpoint cannot be scraped (it may not be running).
+
+      - alert: SourceDataStale
+        expr: quakeflow_source_freshness_seconds > 1800
+        for: 5m
+        annotations:
+          summary: The newest USGS update seen is more than 30 minutes old.
+
+      - alert: FeedPollsFailing
+        expr: sum by (feed) (increase(quakeflow_feed_polls_total{outcome="error"}[15m])) >= 3
+        annotations:
+          summary: "Feed {{ $labels.feed }} failed at least 3 polls in 15 minutes."
+
+      - alert: RevisionsNotReachingKafka
+        expr: quakeflow_pending_revisions > 0
+        for: 10m
+        annotations:
+          summary: Revisions have been waiting for Kafka to confirm them for over 10 minutes.
+
+      - alert: InvalidRecordsAppearing
+        expr: sum(increase(quakeflow_invalid_records_total[1h])) > 10
+        annotations:
+          summary: More than 10 feed records failed validation in the last hour.
+
+  - name: streaming
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: sum by (consumergroup, topic) (kafka_consumergroup_lag) > 1000
+        for: 10m
+        annotations:
+          summary: "Consumer group {{ $labels.consumergroup }} is over 1000 records behind on {{ $labels.topic }}."
+
+      - alert: FlinkCheckpointsFailing
+        expr: increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) > 0
+        annotations:
+          summary: Flink checkpoints failed in the last 10 minutes.
+
+      - alert: FlinkNoRunningJob
+        expr: flink_jobmanager_numRunningJobs == 0
+        for: 5m
+        annotations:
+          summary: The Flink cluster is up but no job is running on it.
+
+  - name: lakehouse
+    rules:
+      - alert: SparkJobFailed
+        expr: quakeflow_spark_job_success == 0
+        annotations:
+          summary: "The last run of Spark job {{ $labels.job }} failed."
+
+      - alert: SparkJobNotRunRecently
+        expr: time() - quakeflow_spark_job_last_success_timestamp_seconds{job="ingest_live"} > 86400
+        annotations:
+          summary: The live load into the lakehouse has not succeeded for over a day.
+
+      - alert: GoldBuildBlocked
+        expr: quakeflow_gold_build_blocked == 1
+        annotations:
+          summary: The quality gate blocked the last Gold build, so Gold is out of date.

@@ -70,12 +70,13 @@ def test_the_image_installs_every_third_party_package_the_container_modules_impo
             elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                 imported.add(node.module.split(".")[0])
     # Standard library and what the Spark image already provides, plus our own packages.
-    provided = {"pyspark", "batch", "yaml"}
+    provided = {"pyspark", "batch", "yaml", "prometheus_client"}
     standard = {
         "argparse", "ast", "collections", "dataclasses", "datetime", "json", "os", "pathlib",
-        "re", "sys", "uuid", "typing", "hashlib", "logging",
+        "re", "sys", "uuid", "typing", "hashlib", "logging", "time", "contextlib",
     }
     unknown = imported - provided - standard
     assert not unknown, f"container modules import packages the image may not have: {unknown}"
     requirements = (BATCH.parent / "docker" / "spark-requirements.txt").read_text().lower()
-    assert "pyyaml" in requirements  # the only package the image installs for yaml
+    assert "pyyaml" in requirements
+    assert "prometheus-client" in requirements

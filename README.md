@@ -92,6 +92,14 @@ docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELEC
 
 Gold tables: `daily_seismic_activity`, `regional_activity`, `magnitude_distribution`, `revision_statistics` and `ingestion_latency` (definitions and caveats in [docs/data-dictionary.md](docs/data-dictionary.md)). Integration tests (the gate test takes about 10 minutes): `python -m pytest -m integration tests/integration/test_build_gold.py`. Note that the Spark image runs Python 3.10, so code in `batch/` that runs there must not use 3.11-only features, and a unit test checks this.
 
+Monitoring (Prometheus, Grafana, Pushgateway, Kafka lag exporter). The collector serves metrics on http://127.0.0.1:9108/metrics while it runs. Set `PUSHGATEWAY_URL` to let the Spark jobs report their results. See [docs/monitoring.md](docs/monitoring.md) for the metrics and alerts:
+
+```powershell
+docker compose --profile core --profile streaming --profile batch --profile monitoring up -d
+$env:PUSHGATEWAY_URL = "http://pushgateway:9091"
+# Grafana: http://localhost:3000 (admin / quakeflow-local)   Prometheus: http://localhost:9090
+```
+
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
 ## Repository layout

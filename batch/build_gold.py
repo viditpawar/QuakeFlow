@@ -21,6 +21,7 @@ import uuid
 from datetime import datetime, timezone  # datetime.UTC needs Python 3.11, the image has 3.10
 from pathlib import Path
 
+from batch.job_metrics import JobRun, job_run
 from batch.quality import CheckResult, load_contract, run_checks
 from batch.sql_files import (
     DEFAULT_BRONZE,
@@ -101,6 +102,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gold-ns", default=DEFAULT_GOLD)
     parser.add_argument("--contract", default=DEFAULT_CONTRACT)
     args = parser.parse_args(argv)
+    with job_run("build_gold") as run:
+        code = build(args, run)
+        run.success = code == 0
+    return code
+
+
+def build(args, run: JobRun) -> int:
     namespaces = (args.bronze_ns, args.silver_ns, args.gold_ns)
 
     contract = load_contract(args.contract)
@@ -135,7 +143,10 @@ def main(argv: list[str] | None = None) -> int:
 
     for result in results:
         log(f"{'ok  ' if result.passed else 'FAIL'} {result.name}: {result.detail}")
-    if not all(r.passed for r in results):
+    failed_checks = sum(1 for r in results if not r.passed)
+    run.gauge("quakeflow_gold_checks_failed", "Quality checks that failed in the last build.", failed_checks)
+    run.gauge("quakeflow_gold_build_blocked", "1 if the last build was blocked by the quality gate.", int(failed_checks > 0))
+    if failed_checks:
         write_log(spark, args.gold_ns, run_id, "blocked", results, current_id, versions_id)
         log("quality gate FAILED: nothing was published, Gold is unchanged")
         spark.stop()

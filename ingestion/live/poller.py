@@ -17,6 +17,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -24,6 +25,7 @@ import yaml
 from ingestion.change_detector import Change, ChangeDetector
 from ingestion.kafka_publisher import KafkaPublisher, PublishReport, build_producer
 from ingestion.live.usgs_client import FeedError, UsgsLiveClient
+from ingestion.metrics import CollectorMetrics
 from processing.normalize import RejectedRecord, normalize_features
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,7 @@ MIN_INTERVAL_SECONDS = 60  # USGS rebuilds the feeds about once a minute
 BACKOFF_CAP_SECONDS = 1800
 DEFAULT_CONFIG = "configs/sources.yaml"
 DEFAULT_DB = "data/quakeflow_state.db"
+DEFAULT_METRICS_PORT = 9108
 
 
 class ConfigError(ValueError):
@@ -55,6 +58,7 @@ class PollResult:
     rejected: list[RejectedRecord] = field(default_factory=list)
     error: str | None = None
     publish: PublishReport | None = None  # None when publishing is off
+    latest_source_update: datetime | None = None  # newest source_updated_at among valid events
 
     @property
     def fully_delivered(self) -> bool:
@@ -122,10 +126,12 @@ class Poller:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], object] | None = None,
         publisher: KafkaPublisher | None = None,
+        metrics: CollectorMetrics | None = None,
     ):
         self.feeds = feeds
         self.detector = detector
         self.publisher = publisher
+        self.metrics = metrics
         self._client_factory = client_factory
         self._clock = clock
         self._sleep = sleep
@@ -136,6 +142,9 @@ class Poller:
         result = self._detect(feed)
         if self.publisher is not None:
             result = replace(result, publish=self.publisher.publish_pending())
+        if self.metrics is not None:
+            self.metrics.record_poll(feed.name, result)
+            self.metrics.set_pending(self.detector.pending_count())
         return result
 
     def _detect(self, feed: FeedConfig) -> PollResult:
@@ -166,12 +175,14 @@ class Poller:
             len(normalized.rejected),
             self.detector.pending_count(),
         )
+        latest = max((event.source_updated_at for event in normalized.valid), default=None)
         return PollResult(
             feed.name,
             ok=True,
             fetched=len(snapshot.features),
             changes=changes,
             rejected=normalized.rejected,
+            latest_source_update=latest,
         )
 
     def poll_all_once(self) -> list[PollResult]:
@@ -210,6 +221,18 @@ def main(
         action="store_true",
         help="detect changes only; leave them pending and do not contact Kafka",
     )
+    parser.add_argument(
+        "--metrics-port",
+        type=int,
+        default=None,
+        help="serve Prometheus metrics on this port (default 9108 when running continuously, "
+        "off with --once, 0 to disable)",
+    )
+    parser.add_argument(
+        "--metrics-address",
+        default="127.0.0.1",
+        help="address to serve metrics on (default: this machine only)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -219,10 +242,25 @@ def main(
         logger.error("cannot load feed configuration: %s", exc)
         return 2
 
+    metrics_port = args.metrics_port
+    if metrics_port is None:
+        metrics_port = 0 if args.once else DEFAULT_METRICS_PORT
+    metrics = CollectorMetrics() if metrics_port else None
+    if metrics is not None:
+        metrics.initialise([feed.name for feed in feeds])
+        metrics.serve(metrics_port, args.metrics_address)
+        logger.info("metrics on http://%s:%d/metrics", args.metrics_address, metrics_port)
+
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     with ChangeDetector(args.db) as detector:
-        publisher = None if args.no_publish else KafkaPublisher(detector, producer_factory())
-        poller = Poller(feeds, detector, client_factory, publisher=publisher)
+        publisher = None
+        if not args.no_publish:
+            publisher = KafkaPublisher(
+                detector,
+                producer_factory(),
+                on_delivered=(lambda e: metrics.record_delivery(e.source_updated_at)) if metrics else None,
+            )
+        poller = Poller(feeds, detector, client_factory, publisher=publisher, metrics=metrics)
         if args.once:
             results = poller.poll_all_once()
             return 0 if all(result.fully_delivered for result in results) else 1

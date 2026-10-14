@@ -1,3 +1,5 @@
 # Python packages for the Spark image (Python 3.10). Installed with --require-hashes.
 pyyaml==6.0.3 \
     --hash=sha256:9c7708761fccb9397fe64bbc0395abcae8c4bf7b0eac081e12b809bf47700d0b
+prometheus-client==0.26.0 \
+    --hash=sha256:fa93d06737aa02bacd05794768508bb97d2fbee28cb3bca04eaae92f0ca953d6

@@ -15,6 +15,7 @@ import os
 import sys
 from pathlib import Path
 
+from batch.job_metrics import job_run
 from batch.sql_files import DEFAULT_BRONZE, DEFAULT_SILVER, load_statements
 
 SQL_DIR = Path(os.getenv("QUAKEFLOW_SQL_DIR", "/workspace/iceberg/sql"))
@@ -66,20 +67,21 @@ def main(argv: list[str] | None = None) -> int:
 
     spark = SparkSession.builder.appName("quakeflow-ingest-history").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
-    for view, kind in (
-        ("raw_history_bronze", "bronze"),
-        ("raw_history_silver", "silver"),
-        ("raw_history_rejected", "rejected"),
-    ):
-        register_view(spark, view, [str(args.input_dir / f"{w}{KINDS[kind]}") for w in windows])
-    for statement in statements:
-        spark.sql(statement)
-    log(
-        f"loaded {len(windows)} windows: "
-        f"{spark.table('incoming_hist_bronze').count()} features, "
-        f"{spark.table('incoming_hist_versions').count()} distinct revisions, "
-        f"{spark.table('incoming_hist_rejected').count()} rejected"
-    )
+    with job_run("ingest_history"):
+        for view, kind in (
+            ("raw_history_bronze", "bronze"),
+            ("raw_history_silver", "silver"),
+            ("raw_history_rejected", "rejected"),
+        ):
+            register_view(spark, view, [str(args.input_dir / f"{w}{KINDS[kind]}") for w in windows])
+        for statement in statements:
+            spark.sql(statement)
+        log(
+            f"loaded {len(windows)} windows: "
+            f"{spark.table('incoming_hist_bronze').count()} features, "
+            f"{spark.table('incoming_hist_versions').count()} distinct revisions, "
+            f"{spark.table('incoming_hist_rejected').count()} rejected"
+        )
     spark.stop()
     return 0
 

@@ -53,6 +53,9 @@ services:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         jobmanager.memory.process.size: 1024m
+        metrics.reporters: prom
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prom.port: 9249
         state.backend.type: hashmap
         state.checkpoints.dir: file:///opt/flink/checkpoints
     volumes:
@@ -80,6 +83,9 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.memory.process.size: 1536m
         taskmanager.numberOfTaskSlots: 2
+        metrics.reporters: prom
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prom.port: 9249
         state.backend.type: hashmap
         state.checkpoints.dir: file:///opt/flink/checkpoints
     volumes:
@@ -154,6 +160,8 @@ services:
       # Kafka's internal listener. Start Kafka too (core profile) for jobs that read topics.
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       PYTHONPATH: /workspace
+      # Set to http://pushgateway:9091 in .env to report job results to Prometheus. Empty means off.
+      PUSHGATEWAY_URL: ${PUSHGATEWAY_URL:-}
     volumes:
       - ./iceberg/catalog:/opt/quakeflow/conf:ro
       - ./iceberg/sql:/workspace/iceberg/sql:ro
@@ -163,9 +171,75 @@ services:
       - spark-checkpoints:/checkpoints
     mem_limit: 2g
 
+  # Monitoring. Start with: docker compose --profile monitoring up -d
+  # Prometheus is at http://localhost:9090 and Grafana at http://localhost:3000
+  # (user admin, password from GRAFANA_ADMIN_PASSWORD, default quakeflow-local).
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    container_name: quakeflow-prometheus
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=1GB
+    ports:
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # the collector runs on the host
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    mem_limit: 384m
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.4.13
+    container_name: quakeflow-grafana
+    profiles: ["monitoring"]
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-quakeflow-local}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/quakeflow-operations.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    mem_limit: 384m
+    restart: unless-stopped
+
+  # Spark jobs are one-off containers, so they push their results here when they finish.
+  pushgateway:
+    image: prom/pushgateway:v1.11.4
+    container_name: quakeflow-pushgateway
+    profiles: ["monitoring"]
+    ports:
+      - "127.0.0.1:9091:9091"
+    mem_limit: 64m
+    restart: unless-stopped
+
+  # Consumer group lag. Needs Kafka (core profile) to be running too.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.10.0
+    container_name: quakeflow-kafka-exporter
+    profiles: ["monitoring"]
+    command:
+      - --kafka.server=kafka:19092
+    mem_limit: 96m
+    restart: unless-stopped
+
 volumes:
   kafka-data:
   flink-checkpoints:
   postgres-data:
   rustfs-data:
   spark-checkpoints:
+  prometheus-data:
+  grafana-data:

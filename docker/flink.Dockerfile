@@ -10,3 +10,6 @@ ADD --chown=flink:flink --chmod=644 \
 
 # Created here, owned by flink, so a named volume mounted on it is writable by the flink user.
 RUN mkdir -p /opt/flink/checkpoints && chown flink:flink /opt/flink/checkpoints
+
+# Metrics: Flink 2.x already ships its Prometheus reporter in plugins/, so it only needs to be
+# switched on (see docker-compose.yml).

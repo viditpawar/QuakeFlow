@@ -72,3 +72,32 @@ Several revisions changed more than one field. A pipeline that watched only the 
 **A bug found on the way.** The first build failed inside the Spark image, because `datetime.UTC` needs Python 3.11 and the image has 3.10. Unit tests missed it because they run on the host. The image now installs PyYAML (pinned with a hash), ruff is told to leave that code alone, and a unit test fails if a 3.11-only feature appears in code that runs in the image. Reintroducing the original bug makes that test fail.
 
 **What this does not show.** The gate was exercised with three kinds of bad data, not every rule. I did not break the gate itself (for example by disabling it) to see the test fail, though the test asserts both the exit code and that Gold is unchanged. A failure part way through publishing was not simulated. The build time was not measured.
+
+## 2026-10-14: monitoring and failure drills
+
+**Monitoring stack.** Prometheus scraped all six targets (the collector on the host, Flink's two nodes, the Kafka lag exporter, the Pushgateway, and itself) and Grafana provisioned the dashboard and datasource. Of the 19 dashboard panels, 17 returned data on the first check. The other two ("Invalid records") showed no data because no record had been invalid yet and a labelled counter does not exist until its first increment. The collector now creates every labelled series at zero, and a test covers it.
+
+**Alert rules.** All 11 rules loaded and were healthy. They were also tested with `promtool` against made-up metric histories, including cases that must not fire. As a control, two thresholds were changed in a copy of the rules, and the tests for those two alerts failed.
+
+**Kafka outage, with real metrics.** A first drill that waited for USGS to publish a new revision during a 10 minute outage proved nothing: no new revision arrived, so nothing went pending, although the collector kept polling normally. A second drill used the real publisher, metrics and Prometheus with a stub feed that adds one new event per poll, on a throwaway topic.
+
+| Moment | What Prometheus saw |
+|---|---|
+| Kafka up, 3 polls | pending 0, published 3 |
+| Kafka stopped, 4 more polls | pending 4, published still 3, polls still succeeding, freshness about 76 s |
+| Kafka restarted, one more poll | pending 0, published 8 |
+| Topic contents | 8 events produced, 8 distinct in the topic, 0 duplicates, none missing |
+
+Recovery took one poll after Kafka reported healthy (about 10 seconds).
+
+**Spark load killed part way.** Three kills at 10, 17 and 23 seconds left the tables in three different states: all empty, then Bronze loaded only, then Bronze and versions but not current. One retry gave 400, 400 and 300 rows with no duplicates and no stale current rows. This shows the tables really can disagree with each other between commits, which is the case the idempotent merges exist for.
+
+**Corrupt input.** Already covered in earlier entries: seven kinds of corrupt message reach the dead-letter topic through Flink, and malformed messages reach `rejected_records` through Spark. Not repeated here.
+
+**Memory with everything running** (Kafka, Flink, PostgreSQL, RustFS, and the monitoring containers): Kafka 443 MB, Flink 470 and 629 MB, RustFS 488 MB, PostgreSQL 44 MB, Grafana 119 MB, Prometheus 67 MB, Pushgateway 23 MB, exporter 19 MB. Spark ran only while a job ran. Host free memory was 3.9 GB of 15.7 GB.
+
+**What this does not show.**
+- The alerts were tested against made-up data, and none was seen firing on real data. The 10 minute `for` periods were not waited out.
+- The real Flink checkpoint-failure and consumer-lag series were present, but a real lag or checkpoint failure was not provoked in this phase.
+- Nothing was sent to anyone, because no Alertmanager runs.
+- The dashboard queries were run through the APIs and returned data, but the rendering in a browser was not inspected.

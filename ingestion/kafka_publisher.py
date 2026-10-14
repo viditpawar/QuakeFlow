@@ -13,12 +13,13 @@ same event, which is why consumers order by source_updated_at, not arrival.
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from confluent_kafka import KafkaException, Producer
 
 from ingestion.change_detector import Change, ChangeDetector
-from schemas.earthquake import utc_to_epoch_ms
+from schemas.earthquake import EarthquakeEvent, utc_to_epoch_ms
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,12 @@ class KafkaPublisher:
         detector: ChangeDetector,
         producer: Producer | None = None,
         topic: str = RAW_TOPIC,
+        on_delivered: Callable[[EarthquakeEvent], None] | None = None,
     ):
         self._detector = detector
         self._producer = producer or build_producer()
         self._topic = topic
+        self._on_delivered = on_delivered  # called once per revision Kafka confirms
 
     def publish_pending(self, flush_timeout: float = 30.0) -> PublishReport:
         """Send every unconfirmed revision, wait for acknowledgements, and report the outcome."""
@@ -72,13 +75,15 @@ class KafkaPublisher:
         delivered = 0
         errors: list[str] = []
 
-        def on_delivery(error, message, *, event_id: str, record_hash: str) -> None:
+        def on_delivery(error, message, *, event: EarthquakeEvent) -> None:
             nonlocal delivered
             if error is not None:
-                errors.append(f"{event_id}: {error}")
+                errors.append(f"{event.event_id}: {error}")
                 return  # stays pending, retried next cycle
-            if self._detector.mark_published(event_id, record_hash):
+            if self._detector.mark_published(event.event_id, event.record_hash):
                 delivered += 1
+                if self._on_delivered is not None:
+                    self._on_delivered(event)
 
         for change in changes:
             try:
@@ -124,7 +129,5 @@ class KafkaPublisher:
                 ("record_hash", record_hash.encode()),
             ],
             timestamp=utc_to_epoch_ms(event.source_updated_at),
-            on_delivery=lambda error, message: on_delivery(
-                error, message, event_id=event.event_id, record_hash=record_hash
-            ),
+            on_delivery=lambda error, message: on_delivery(error, message, event=event),
         )

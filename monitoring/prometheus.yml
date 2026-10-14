@@ -1,0 +1,35 @@
+# Prometheus for QuakeFlow. Start with: docker compose --profile monitoring up -d
+# Targets that are not running simply show as down. Nothing here needs them all to be up.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # The collector runs on the host (python -m ingestion.live.poller), not in a container.
+  # host.docker.internal is how a container reaches the host on Docker Desktop.
+  - job_name: quakeflow-collector
+    static_configs:
+      - targets: ["host.docker.internal:9108"]
+
+  # Flink's built-in Prometheus reporter, enabled in docker-compose.yml.
+  - job_name: flink
+    static_configs:
+      - targets: ["flink-jobmanager:9249", "flink-taskmanager:9249"]
+
+  # Consumer group lag per topic and partition.
+  - job_name: kafka
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+
+  # Results pushed by the Spark jobs when they finish. honor_labels keeps the job label they set.
+  - job_name: spark-jobs
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]

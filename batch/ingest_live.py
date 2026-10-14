@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
 
+from batch.job_metrics import job_run
 from batch.sql_files import DEFAULT_BRONZE, DEFAULT_SILVER, load_statements
 
 SQL_DIR = Path(os.getenv("QUAKEFLOW_SQL_DIR", "/workspace/iceberg/sql"))
@@ -120,8 +121,9 @@ def main(argv: list[str] | None = None) -> int:
 
     spark = SparkSession.builder.appName("quakeflow-ingest-live").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
-    consume(spark, args.bootstrap, args.topic, live_batch_handler(live), f"{args.checkpoint_dir}/validated")
-    consume(spark, args.bootstrap, args.dlq_topic, dlq_batch_handler(rejected), f"{args.checkpoint_dir}/dlq")
+    with job_run("ingest_live"):
+        consume(spark, args.bootstrap, args.topic, live_batch_handler(live), f"{args.checkpoint_dir}/validated")
+        consume(spark, args.bootstrap, args.dlq_topic, dlq_batch_handler(rejected), f"{args.checkpoint_dir}/dlq")
     log("done")
     spark.stop()
     return 0
