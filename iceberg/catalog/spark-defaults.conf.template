@@ -1,0 +1,23 @@
+# Spark settings for the QuakeFlow lakehouse. Dollar-brace placeholders are filled from environment
+# variables by docker/spark-entrypoint.sh when the container starts.
+
+spark.sql.extensions                          org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+spark.sql.session.timeZone                    UTC
+spark.driver.memory                           1g
+spark.ui.enabled                              false
+
+# Iceberg catalog "local": table metadata in PostgreSQL, data and metadata files in RustFS (S3).
+spark.sql.defaultCatalog                      local
+spark.sql.catalog.local                       org.apache.iceberg.spark.SparkCatalog
+spark.sql.catalog.local.catalog-impl          org.apache.iceberg.jdbc.JdbcCatalog
+spark.sql.catalog.local.uri                   jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+spark.sql.catalog.local.jdbc.user             ${POSTGRES_USER}
+spark.sql.catalog.local.jdbc.password         ${POSTGRES_PASSWORD}
+spark.sql.catalog.local.jdbc.schema-version   V1
+spark.sql.catalog.local.warehouse             s3://${WAREHOUSE_BUCKET}/
+spark.sql.catalog.local.io-impl               org.apache.iceberg.aws.s3.S3FileIO
+spark.sql.catalog.local.s3.endpoint           http://rustfs:9000
+spark.sql.catalog.local.s3.path-style-access  true
+spark.sql.catalog.local.s3.access-key-id      ${S3_ACCESS_KEY}
+spark.sql.catalog.local.s3.secret-access-key  ${S3_SECRET_KEY}
+spark.sql.catalog.local.client.region         us-east-1

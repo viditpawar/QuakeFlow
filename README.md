@@ -54,6 +54,17 @@ The sinks are exactly-once, so anything reading the output topics must use `isol
 
 The integration and recovery tests run the real job on throwaway topics (they need the stack running): `python -m pytest -m integration tests/integration tests/recovery`. See [docs/recovery-runbook.md](docs/recovery-runbook.md) for failure recovery.
 
+Lakehouse (PostgreSQL catalog, RustFS object storage, Spark 4.0 and Iceberg), separate profile:
+
+```powershell
+docker compose --profile batch up -d postgres rustfs
+python infrastructure\storage\create_bucket.py   # first time only; safe to repeat
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -f /workspace/iceberg/sql/001_create_namespaces.sql
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SHOW NAMESPACES"
+```
+
+Spark runs as a one-off container per command, so it uses memory only while a job runs. The RustFS console is at http://localhost:9001. Default credentials are local-only and can be changed in `.env` (see `.env.example`).
+
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
 ## Repository layout
