@@ -37,6 +37,15 @@ python -m ingestion.live.poller              # poll both USGS feeds and publish 
 
 Useful flags for the poller: `--once` polls every feed a single time and exits (non-zero if Kafka did not confirm everything), and `--no-publish` only detects changes without contacting Kafka. Feed URLs and intervals are in `configs/sources.yaml`. Collector state is kept in a local SQLite file (`data/quakeflow_state.db` by default), which is not committed.
 
+Stream processing (Flink 2.2.1, adds about 1.5 GB of RAM) runs under a separate profile, together with Kafka:
+
+```powershell
+docker compose --profile core --profile streaming up -d --build
+docker exec quakeflow-flink-jobmanager ./bin/sql-client.sh -i /opt/flink/sql/kafka_sources.sql -f /opt/flink/sql/smoke_count.sql
+```
+
+The Flink web UI is at http://localhost:8081.
+
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
 ## Repository layout

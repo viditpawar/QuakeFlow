@@ -37,5 +37,56 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Stream processing. Start together with Kafka:
+  #   docker compose --profile core --profile streaming up -d
+  flink-jobmanager:
+    build:
+      context: .
+      dockerfile: docker/flink.Dockerfile
+    image: quakeflow/flink:2.2.1
+    container_name: quakeflow-flink-jobmanager
+    profiles: ["streaming"]
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.memory.process.size: 1024m
+        state.backend.type: hashmap
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
+      - ./flink/sql:/opt/flink/sql:ro
+    mem_limit: 1280m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/overview > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  flink-taskmanager:
+    image: quakeflow/flink:2.2.1
+    container_name: quakeflow-flink-taskmanager
+    profiles: ["streaming"]
+    command: taskmanager
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.memory.process.size: 1536m
+        taskmanager.numberOfTaskSlots: 2
+        state.backend.type: hashmap
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
+    mem_limit: 1792m
+    restart: unless-stopped
+
 volumes:
   kafka-data:
+  flink-checkpoints:
