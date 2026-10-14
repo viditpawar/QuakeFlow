@@ -2,7 +2,7 @@
 # JDBC driver for the Iceberg catalog. Every download is pinned and verified against a SHA-256.
 # To upgrade, change the Spark tag and the Iceberg runtime together (the runtime name carries the
 # Spark line, 4.0_2.13), then update the checksums.
-FROM apache/spark:4.0.4-scala2.13-java17-python3-ubuntu
+FROM apache/spark:4.2.0-scala2.13-java17-python3-ubuntu
 
 USER root
 
