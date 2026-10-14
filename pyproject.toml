@@ -28,6 +28,9 @@ target-version = "py311"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# Integration tests need the Docker stack, so they run only on request: pytest -m integration
+addopts = "-m 'not integration'"
+markers = ["integration: needs the Docker stack (Kafka, Flink) to be running"]
 
 [project.optional-dependencies]
 dev = [

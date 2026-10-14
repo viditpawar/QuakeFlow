@@ -44,7 +44,15 @@ docker compose --profile core --profile streaming up -d --build
 docker exec quakeflow-flink-jobmanager ./bin/sql-client.sh -i /opt/flink/sql/kafka_sources.sql -f /opt/flink/sql/smoke_count.sql
 ```
 
-The Flink web UI is at http://localhost:8081.
+Start the validation and deduplication job (reads `quakeflow.events.raw`, writes `quakeflow.events.validated` and `quakeflow.events.dlq`):
+
+```powershell
+docker exec quakeflow-flink-jobmanager sh -c "cat /opt/flink/sql/kafka_sources.sql /opt/flink/sql/validated_events.sql /opt/flink/sql/revision_tracking.sql > /tmp/job.sql && ./bin/sql-client.sh -f /tmp/job.sql"
+```
+
+The sinks are exactly-once, so anything reading the output topics must use `isolation.level=read_committed`. The Flink web UI is at http://localhost:8081. Cancel the job there, or with `curl -X PATCH "localhost:8081/jobs/<job id>?mode=cancel"` inside the jobmanager container.
+
+The integration test runs the real job on throwaway topics (needs the stack running): `python -m pytest -m integration tests/integration`.
 
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
