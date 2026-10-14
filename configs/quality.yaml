@@ -1,0 +1,89 @@
+# Data quality contract for the Gold build (batch/build_gold.py).
+# Every check counts violations, and a check passes only when it finds none. If any check fails
+# or cannot run, nothing is promoted to Gold and the failure is recorded in gold.build_log.
+#
+# Rules:
+#   not_null   column is not null
+#   unique     the column, or the combination of columns, appears once per row
+#   between    non-null values lie within min and max (either may be left out)
+#   min_rows   the table has at least min rows
+#
+# Table names use the default namespaces and are rewritten when a job is pointed elsewhere.
+
+datasets:
+  - dataset: earthquakes_current
+    table: local.silver.earthquakes_current
+    checks:
+      - name: current_has_rows
+        rule: min_rows
+        min: 1
+      - name: event_id_required
+        column: event_id
+        rule: not_null
+      - name: event_id_unique
+        column: event_id
+        rule: unique
+      - name: event_timestamp_required
+        column: event_time
+        rule: not_null
+      - name: source_updated_at_required
+        column: source_updated_at
+        rule: not_null
+      - name: record_hash_required
+        column: record_hash
+        rule: not_null
+      - name: latitude_range
+        column: latitude
+        rule: between
+        min: -90
+        max: 90
+      - name: longitude_range
+        column: longitude
+        rule: between
+        min: -180
+        max: 180
+
+  - dataset: earthquake_versions
+    table: local.silver.earthquake_versions
+    checks:
+      - name: version_identity_unique
+        columns: [event_id, record_hash]
+        rule: unique
+      - name: version_event_id_required
+        column: event_id
+        rule: not_null
+      - name: version_source_updated_at_required
+        column: source_updated_at
+        rule: not_null
+      - name: version_latitude_range
+        column: latitude
+        rule: between
+        min: -90
+        max: 90
+      - name: version_longitude_range
+        column: longitude
+        rule: between
+        min: -180
+        max: 180
+
+# Checks on the staged Gold results, before they replace the Gold tables. Each pairs two queries
+# that must return the same number, so a model that loses or double counts events is caught.
+reconciliations:
+  - name: daily_counts_match_current
+    left: SELECT coalesce(sum(event_count), 0) FROM staged_daily_seismic_activity
+    right: SELECT count(*) FROM local.silver.earthquakes_current WHERE event_type = 'earthquake'
+  - name: daily_other_types_match_current
+    left: SELECT coalesce(sum(non_earthquake_count), 0) FROM staged_daily_seismic_activity
+    right: SELECT count(*) FROM local.silver.earthquakes_current WHERE event_type <> 'earthquake' OR event_type IS NULL
+  - name: regional_counts_match_current
+    left: SELECT coalesce(sum(event_count), 0) FROM staged_regional_activity
+    right: SELECT count(*) FROM local.silver.earthquakes_current WHERE event_type = 'earthquake'
+  - name: magnitude_bands_match_current
+    left: SELECT coalesce(sum(event_count), 0) FROM staged_magnitude_distribution
+    right: SELECT count(*) FROM local.silver.earthquakes_current WHERE event_type = 'earthquake'
+  - name: revision_event_counts_match_versions
+    left: SELECT coalesce(sum(event_count), 0) FROM staged_revision_statistics
+    right: SELECT count(DISTINCT event_id) FROM local.silver.earthquake_versions WHERE event_type = 'earthquake'
+  - name: latency_counts_match_live_versions
+    left: SELECT coalesce(sum(revision_count), 0) FROM staged_ingestion_latency
+    right: SELECT count(*) FROM local.silver.earthquake_versions WHERE source = 'live'

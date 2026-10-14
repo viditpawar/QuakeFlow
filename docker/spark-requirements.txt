@@ -1,0 +1,3 @@
+# Python packages for the Spark image (Python 3.10). Installed with --require-hashes.
+pyyaml==6.0.3 \
+    --hash=sha256:9c7708761fccb9397fe64bbc0395abcae8c4bf7b0eac081e12b809bf47700d0b

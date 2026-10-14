@@ -83,6 +83,15 @@ docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /works
 
 The first command writes a raw download, normalized files and a manifest per window under `data/history/` (not committed). The second merges the completed windows into the lakehouse. Loading twice, or loading overlapping ranges, leaves the tables unchanged, and an older revision never replaces a newer current one. Integration tests: `python -m pytest -m integration tests/integration/test_ingest_history.py` (about 6 minutes).
 
+Build the Gold analytics tables from Silver. The job audits the data against `configs/quality.yaml` first and publishes only if every check passes. If any check fails, Gold is left untouched, the exit code is 1, and the attempt is recorded in `gold.build_log`:
+
+```powershell
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/build_gold.py
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELECT status, checks_failed, failed_checks FROM local.gold.build_log ORDER BY built_at DESC LIMIT 5"
+```
+
+Gold tables: `daily_seismic_activity`, `regional_activity`, `magnitude_distribution`, `revision_statistics` and `ingestion_latency` (definitions and caveats in [docs/data-dictionary.md](docs/data-dictionary.md)). Integration tests (the gate test takes about 10 minutes): `python -m pytest -m integration tests/integration/test_build_gold.py`. Note that the Spark image runs Python 3.10, so code in `batch/` that runs there must not use 3.11-only features, and a unit test checks this.
+
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
 ## Repository layout

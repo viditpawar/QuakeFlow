@@ -41,7 +41,7 @@ def run_ingest(
     )
     if result.returncode != 0:
         raise AssertionError(f"ingest failed:\n{result.stdout[-1500:]}\n{result.stderr[-4000:]}")
-    return result.stderr
+    return result.stdout + result.stderr  # compose may put the container's stderr on stdout
 
 
 def remove_checkpoint(path: str) -> None:
@@ -62,4 +62,4 @@ def run_ingest_history(input_dir: str, bronze: str, silver: str, timeout: int = 
     )
     if result.returncode != 0:
         raise AssertionError(f"ingest_history failed:\n{result.stdout[-1500:]}\n{result.stderr[-4000:]}")
-    return result.stderr
+    return result.stdout + result.stderr  # compose may put the container's stderr on stdout

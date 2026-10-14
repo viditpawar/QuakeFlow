@@ -158,6 +158,7 @@ services:
       - ./iceberg/catalog:/opt/quakeflow/conf:ro
       - ./iceberg/sql:/workspace/iceberg/sql:ro
       - ./batch:/workspace/batch:ro
+      - ./configs/quality.yaml:/workspace/configs/quality.yaml:ro
       - ./data/history:/data/history:ro   # windows written by batch/backfill.py
       - spark-checkpoints:/checkpoints
     mem_limit: 2g

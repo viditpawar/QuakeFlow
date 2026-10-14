@@ -38,6 +38,12 @@ ADD --chmod=644 \
     https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar \
     /opt/spark/jars/
 
+# The image's Python is 3.10, older than the 3.11 used on the host, so code that runs here
+# (batch/*.py except backfill.py) must not use 3.11-only features. PyYAML reads the quality
+# contract. It is pinned and verified against the SHA-256 PyPI publishes for this wheel.
+RUN --mount=type=bind,target=/tmp/req,source=docker/spark-requirements.txt \
+    python3 -m pip install --no-cache-dir --require-hashes -r /tmp/req
+
 # Structured Streaming checkpoints live here (a named volume), owned by the spark user.
 RUN mkdir -p /checkpoints && chown spark:spark /checkpoints
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 DEFAULT_BRONZE = "local.bronze"
 DEFAULT_SILVER = "local.silver"
+DEFAULT_GOLD = "local.gold"
 
 
 def split_statements(sql: str) -> list[str]:
@@ -20,12 +21,18 @@ def split_statements(sql: str) -> list[str]:
     return [statement for statement in statements if statement]
 
 
-def with_namespaces(sql: str, bronze: str = DEFAULT_BRONZE, silver: str = DEFAULT_SILVER) -> str:
+def with_namespaces(
+    sql: str, bronze: str = DEFAULT_BRONZE, silver: str = DEFAULT_SILVER, gold: str = DEFAULT_GOLD
+) -> str:
     """Point a script at different namespaces, for example throwaway ones in a test."""
-    return sql.replace(DEFAULT_BRONZE, bronze).replace(DEFAULT_SILVER, silver)
+    return sql.replace(DEFAULT_BRONZE, bronze).replace(DEFAULT_SILVER, silver).replace(DEFAULT_GOLD, gold)
 
 
 def load_statements(
-    path: str | Path, bronze: str = DEFAULT_BRONZE, silver: str = DEFAULT_SILVER
+    path: str | Path,
+    bronze: str = DEFAULT_BRONZE,
+    silver: str = DEFAULT_SILVER,
+    gold: str = DEFAULT_GOLD,
 ) -> list[str]:
-    return split_statements(with_namespaces(Path(path).read_text(encoding="utf-8"), bronze, silver))
+    text = Path(path).read_text(encoding="utf-8")
+    return split_statements(with_namespaces(text, bronze, silver, gold))

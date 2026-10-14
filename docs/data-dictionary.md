@@ -74,3 +74,27 @@ Records that failed validation. Columns: `rejected_at`, `stage` (flink, spark or
 - Features that fail validation go to `silver.rejected_records` with `stage = 'normalize'` and `source = 'historical'`, identified by their event id and text.
 
 The catalog returns the current state of each event, not its past revisions, so a backfill cannot recover earlier versions.
+
+# Gold: analytics
+
+Built by `batch/build_gold.py` from Silver, behind the quality gate in `configs/quality.yaml`. Each table is replaced as a whole on every successful build, and a failed build leaves all of them as they were.
+
+**Conventions.** Days and months are UTC. Earthquake analytics count only `event_type = 'earthquake'`, so quarry blasts and other types do not inflate the numbers (D-004). Counts describe what USGS had published and this platform had loaded when the table was built. They are not a complete catalog of every earthquake, and the lakehouse currently holds a magnitude 2.5 and above week from January 2025 beside all-magnitude recent days, so compare periods only if they were loaded the same way.
+
+| Table | One row per | Answers |
+|---|---|---|
+| `gold.daily_seismic_activity` | UTC day of `event_time` | How many earthquakes per day, with magnitude statistics, how many were reviewed, and how many other event types were left out. |
+| `gold.regional_activity` | UTC month and region | Which regions have the most activity. The region is the text after the last comma of `place`, so it is a convenient grouping and not an authoritative geography. USGS writes both "CA" and "California", which show up as separate regions. |
+| `gold.magnitude_distribution` | whole-magnitude band | How earthquake counts vary by magnitude. Bands are `<0`, `0-1` up to `6-7`, `7+`, and `unknown` for events with no magnitude. `share` is the fraction of all earthquakes. |
+| `gold.revision_statistics` | UTC day of the latest revision's `event_time` | How many events were revised, how long between revisions, and what changed (magnitude, depth, location, review status), plus the largest magnitude change and same-timestamp conflicts. It only sees revisions this platform observed, so changes between two polls are invisible. |
+| `gold.ingestion_latency` | UTC day of `loaded_at` | How long a live revision waited between its USGS update and being written to Silver (average, median, 95th percentile, maximum, in minutes). The wait includes how often the load job is run, so it measures the whole path and not Kafka or Flink alone. Historical backfills are excluded. |
+| `gold.build_log` | build attempt | Whether each attempt was `promoted`, `blocked` by a failed check, or `publish_failed`, which checks failed, and which Iceberg snapshots of Silver were read. |
+
+## Quality contract
+
+`configs/quality.yaml` holds the checks. A check passes when it finds no violations, and a check that cannot run counts as failed.
+
+- **On `silver.earthquakes_current`:** at least one row, `event_id` present and unique, `event_time`, `source_updated_at` and `record_hash` present, latitude within -90 to 90, and longitude within -180 to 180.
+- **On `silver.earthquake_versions`:** `(event_id, record_hash)` unique, `event_id` and `source_updated_at` present, and the same coordinate ranges.
+- **Reconciliations:** each staged Gold result must account for exactly the events in Silver, for example the daily counts must sum to the number of earthquakes in `earthquakes_current`.
+- **Column order:** each staged result must have the same columns, in the same order, as the table it replaces.

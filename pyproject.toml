@@ -26,6 +26,15 @@ include = ["ingestion*", "schemas*", "processing*", "batch*"]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint.per-file-ignores]
+# These modules run inside the Spark image, whose Python is 3.10, so they must not be
+# rewritten to 3.11-only forms such as datetime.UTC (rule UP017).
+"batch/build_gold.py" = ["UP017"]
+"batch/ingest_live.py" = ["UP017"]
+"batch/ingest_history.py" = ["UP017"]
+"batch/quality.py" = ["UP017"]
+"batch/sql_files.py" = ["UP017"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

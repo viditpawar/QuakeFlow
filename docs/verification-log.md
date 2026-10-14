@@ -54,3 +54,21 @@ Several revisions changed more than one field. A pipeline that watched only the 
 **How the overlap resolved.** 28 events were seen by both the live and the historical path. In all 28 the historical revision was newer than the live one (USGS had revised them after the last live poll), and the current row correctly moved to it. There were no cases of an older historical copy meeting a newer live one, so that rule was not exercised by real data. It is covered by an integration test that seeds a newer live revision, and by a negative control: with the merge changed to always overwrite, the test fails because the old snapshot replaces the live revision.
 
 **What this does not show.** One week and three days of data. The catalog returns the current state of each event, so this does not test recovery of earlier revisions. No timings were measured, and no window over the 20,000-event limit was downloaded for real (splitting is covered by unit tests with a fake catalog).
+
+## 2026-10-14: Gold build and quality gate
+
+**What was run.** `batch/build_gold.py` on the real lakehouse (1,058 current rows across 1,105 versions), then the two integration tests that build Gold from known data.
+
+| Check | Result |
+|---|---|
+| Real build | 24 checks passed (5 column-order checks, 8 on `earthquakes_current`, 5 on `earthquake_versions`, 6 reconciliations). All 5 Gold tables were replaced. The reconciliations held: 1,044 earthquakes plus 14 other event types equals the 1,058 current rows. |
+| Known data | Daily, band, regional, revision and latency numbers matched values worked out by hand from six events with two revisions. A quarry blast was excluded from earthquake counts and counted separately. An event with no magnitude fell in the `unknown` band. |
+| Bad data, 1 | A row with latitude 95 blocked the build (exit 1, `latitude_range` failed). Every Gold table was identical to before. |
+| Bad data, 2 | A duplicate event id plus a row with no event time blocked the build (`event_id_unique` and `event_timestamp_required` failed). Gold again unchanged. |
+| After fixing | With the bad rows removed and one new event added, the build promoted and Gold changed. The build log read promoted, blocked, blocked, promoted. |
+
+**What the real Gold tables show, with their limits.** Latency averaged about 16 hours, but that reflects when the load job was run by hand, not how fast the pipeline is. The magnitude bands are skewed toward 4 to 5 (38 percent) because the lakehouse holds a magnitude 2.5 and above week from January 2025 beside all-magnitude recent days. Regional counts split "CA" and "California". These are properties of the data loaded so far, not of the models.
+
+**A bug found on the way.** The first build failed inside the Spark image, because `datetime.UTC` needs Python 3.11 and the image has 3.10. Unit tests missed it because they run on the host. The image now installs PyYAML (pinned with a hash), ruff is told to leave that code alone, and a unit test fails if a 3.11-only feature appears in code that runs in the image. Reintroducing the original bug makes that test fail.
+
+**What this does not show.** The gate was exercised with three kinds of bad data, not every rule. I did not break the gate itself (for example by disabling it) to see the test fail, though the test asserts both the exit code and that Gold is unchanged. A failure part way through publishing was not simulated. The build time was not measured.

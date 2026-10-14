@@ -98,6 +98,48 @@ def test_every_incoming_historical_view_is_deduplicated_before_it_is_merged():
         assert "row_number()" in view and "copy_number = 1" in view, view[:60]
 
 
+def test_gold_build_script_stages_before_it_publishes():
+    from batch.build_gold import publish_targets, split_build_statements
+
+    stage, publish = split_build_statements(load_statements(SQL_DIR / "005_build_gold.sql"))
+    assert len(stage) == 5 and len(publish) == 5
+    assert all(s.count("'") % 2 == 0 for s in stage + publish)
+    targets = publish_targets(publish)
+    assert {t for t, _ in targets} == {
+        "local.gold.daily_seismic_activity",
+        "local.gold.regional_activity",
+        "local.gold.magnitude_distribution",
+        "local.gold.revision_statistics",
+        "local.gold.ingestion_latency",
+    }
+    staged_names = {s.split()[5] for s in stage}  # CREATE OR REPLACE TEMP VIEW <name> AS
+    assert {v for _, v in targets} == staged_names
+
+
+def test_gold_build_refuses_anything_but_views_and_overwrites():
+    import pytest
+
+    from batch.build_gold import publish_targets, split_build_statements
+
+    with pytest.raises(ValueError):
+        split_build_statements(["DROP TABLE local.gold.x"])
+    with pytest.raises(ValueError):
+        publish_targets(["INSERT OVERWRITE local.gold.x SELECT a FROM staged_x"])
+
+
+def test_every_gold_table_is_created_before_the_build_writes_to_it():
+    from batch.build_gold import publish_targets, split_build_statements
+
+    created = {
+        s.split()[5]
+        for s in load_statements(SQL_DIR / "004_gold_models.sql")
+        if s.startswith("CREATE TABLE")
+    }
+    _, publish = split_build_statements(load_statements(SQL_DIR / "005_build_gold.sql"))
+    assert {t for t, _ in publish_targets(publish)} <= created
+    assert "local.gold.build_log" in created
+
+
 def test_historical_bronze_and_rejected_merges_are_null_safe_on_event_id():
     text = "\n".join(load_statements(SQL_DIR / "003_merge_history.sql"))
     assert text.count("t.event_id <=> s.event_id") == 2
