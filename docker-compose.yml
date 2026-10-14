@@ -128,7 +128,8 @@ services:
       RUSTFS_OBS_LOGGER_LEVEL: error
     volumes:
       - rustfs-data:/data
-    mem_limit: 512m
+    # Measured at 470 MB with the full pipeline loaded, so 512 MB left no headroom.
+    mem_limit: 768m
     restart: unless-stopped
 
   # Spark runs per job instead of idling: docker compose --profile batch run --rm spark <command>
