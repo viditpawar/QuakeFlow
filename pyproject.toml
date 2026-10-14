@@ -16,7 +16,7 @@ dependencies = [
     "pydantic>=2.7",
     "prometheus-client>=0.21",
     "pyyaml>=6.0",
-    "requests>=2.32",
+    "requests>=2.34.2",
 ]
 
 # Flat layout: each top-level package is listed explicitly. Add new ones here.
