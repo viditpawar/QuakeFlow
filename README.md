@@ -74,6 +74,15 @@ docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELEC
 
 Running the job twice, or after deleting its checkpoint, leaves the tables unchanged. Integration tests for it: `python -m pytest -m integration tests/integration/test_ingest_live.py` (about 6 minutes).
 
+Backfill historical events from the USGS catalog (start inclusive, end exclusive, UTC). Re-running the same command skips windows that are already complete, and windows over the service's 20,000-event limit are split automatically:
+
+```powershell
+python -m batch.backfill --start 2025-01-01 --end 2025-01-08 --min-magnitude 2.5
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/ingest_history.py
+```
+
+The first command writes a raw download, normalized files and a manifest per window under `data/history/` (not committed). The second merges the completed windows into the lakehouse. Loading twice, or loading overlapping ranges, leaves the tables unchanged, and an older revision never replaces a newer current one. Integration tests: `python -m pytest -m integration tests/integration/test_ingest_history.py` (about 6 minutes).
+
 Run the tests and linter with `python -m pytest` and `python -m ruff check .`. Stop Kafka with `docker compose --profile core down`.
 
 ## Repository layout

@@ -29,11 +29,11 @@ class FeedSnapshot:
     fetched_at: datetime  # when we received it
 
 
-def build_session() -> requests.Session:
+def build_session(retries: int = 3, backoff_factor: float = 1.0) -> requests.Session:
     """Session that retries transient failures with exponential backoff."""
     retry = Retry(
-        total=3,
-        backoff_factor=1.0,
+        total=retries,
+        backoff_factor=backoff_factor,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=("GET",),
     )

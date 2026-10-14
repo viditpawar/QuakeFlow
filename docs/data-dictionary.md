@@ -63,3 +63,14 @@ Records that failed validation. Columns: `rejected_at`, `stage` (flink, spark or
 - Valid messages add a row to `silver.earthquake_versions` if that `(event_id, record_hash)` is new.
 - `silver.earthquakes_current` takes the newest revision of each event. A later-arriving older revision does not replace it.
 - Messages that fail validation go to `silver.rejected_records` with `stage = 'spark'`. Records Flink rejected are read from the dead-letter topic with `stage = 'flink'`.
+
+## How historical data is loaded
+
+`batch/backfill.py` downloads the USGS catalog in windows and `batch/ingest_history.py` merges the completed windows (statements in `iceberg/sql/003_merge_history.sql`):
+
+- Every feature goes to `bronze.historical_observations` as the original GeoJSON text. A row is identified by `(event_id, payload_sha256)`.
+- Valid features add a `source = 'historical'` row to `silver.earthquake_versions` if that `(event_id, record_hash)` is new. A historical copy of an event that live already loaded, with the same content, has the same `record_hash` and adds nothing.
+- `silver.earthquakes_current` follows the same rule as the live load: a historical revision replaces the stored one only if it is newer.
+- Features that fail validation go to `silver.rejected_records` with `stage = 'normalize'` and `source = 'historical'`, identified by their event id and text.
+
+The catalog returns the current state of each event, not its past revisions, so a backfill cannot recover earlier versions.

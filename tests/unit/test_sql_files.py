@@ -66,3 +66,38 @@ def test_namespaces_apply_to_the_real_merge_file():
     text = "\n".join(statements)
     assert "local.bronze" not in text and "local.silver" not in text
     assert "local.tb.live_observations" in text and "local.ts.earthquakes_current" in text
+
+
+def _merge_condition(file_name: str) -> str:
+    text = (SQL_DIR / file_name).read_text()
+    start = text.index("WHEN MATCHED AND (")
+    return " ".join(text[start : text.index("THEN UPDATE SET *", start)].split())
+
+
+def test_live_and_historical_current_state_merges_use_the_identical_ordering_rule():
+    # The two files repeat the rule, so a change to one must be made to the other.
+    assert _merge_condition("003_merge_current.sql") == _merge_condition("003_merge_history.sql")
+
+
+def test_historical_merge_file_shape():
+    statements = load_statements(SQL_DIR / "003_merge_history.sql")
+    views = [s for s in statements if s.startswith("CREATE OR REPLACE TEMP VIEW")]
+    merges = [s for s in statements if s.startswith("MERGE")]
+    assert len(views) == 4 and len(merges) == 4
+    assert all(s.count("'") % 2 == 0 for s in statements)
+    assert statements.index(merges[0]) > statements.index(views[-1])
+
+
+def test_every_incoming_historical_view_is_deduplicated_before_it_is_merged():
+    # An unconditional insert of unmatched rows would insert a duplicate twice.
+    statements = load_statements(SQL_DIR / "003_merge_history.sql")
+    for view in (s for s in statements if s.startswith("CREATE OR REPLACE TEMP VIEW incoming_hist_")):
+        if "incoming_hist_latest" in view.split("AS")[0]:
+            assert "row_number()" in view
+            continue
+        assert "row_number()" in view and "copy_number = 1" in view, view[:60]
+
+
+def test_historical_bronze_and_rejected_merges_are_null_safe_on_event_id():
+    text = "\n".join(load_statements(SQL_DIR / "003_merge_history.sql"))
+    assert text.count("t.event_id <=> s.event_id") == 2

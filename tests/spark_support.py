@@ -50,3 +50,16 @@ def remove_checkpoint(path: str) -> None:
          "spark", "-rf", path],
         cwd=ROOT, capture_output=True, text=True, timeout=300, check=False,
     )
+
+
+def run_ingest_history(input_dir: str, bronze: str, silver: str, timeout: int = 900) -> str:
+    """Run batch/ingest_history.py once in the Spark container. Returns its log output."""
+    result = subprocess.run(
+        ["docker", "compose", "--profile", "batch", "run", "--rm", "-T", "spark",
+         "/opt/spark/bin/spark-submit", "/workspace/batch/ingest_history.py",
+         "--input-dir", input_dir, "--bronze-ns", bronze, "--silver-ns", silver],
+        cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"ingest_history failed:\n{result.stdout[-1500:]}\n{result.stderr[-4000:]}")
+    return result.stderr
