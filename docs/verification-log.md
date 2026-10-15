@@ -140,3 +140,45 @@ Recovery took one poll after Kafka reported healthy (about 10 seconds).
 **What this does not show.** It is one drill with one outage length and was not repeated. It is a manual drill and not an automated test, because stopping the shared Kafka disrupts everything else running. An automated unit test only checks that the strategy is configured with no attempt limit. A job that fails for a reason that never fixes itself will now retry forever instead of stopping, and shows only as RESTARTING.
 
 **Also changed.** The Grafana count panels "Events ingested" and "New revisions" were showing in red and with a decimal because of Grafana's default thresholds. They are now neutral blue and whole numbers. Series from the drills (a feed called "drill") remain in the charts until Prometheus's retention removes them.
+
+## 2026-10-14: leaked test topics
+
+**What was found.** A check for leftovers after the integration tests found 48 test topics (16 sets named `quakeflow.test.<id>.raw`, `.validated` and `.dlq`) still in Kafka. The Iceberg catalog and the Spark checkpoint volume were clean. No real topic was affected.
+
+**Cause.** The test helper deleted topics with `AdminClient(...).delete_topics(...)` written as one expression. The client object is destroyed as soon as the call returns, which cancels the request before Kafka acts on it. A first explanation (that the helper did not wait for the answer) was only part of it, and a first fix that added the wait did not stop the leak. Reproducing the helper on its own, with no Flink involved, showed that it still left its topics, and keeping the client in a variable fixed it.
+
+**Fix and verification.** The helper keeps the client alive until the deletion finishes. A test now creates a set of topics, deletes them with the helper and checks that they are gone. With the old one-line version restored it fails with "the helper left its topics behind", and with the fix it passes. The 48 leaked topics were deleted by matching only the `quakeflow.test.` prefix, and the three real topics were left alone. A real Flink integration test was then run, and only the three real topics remained afterwards.
+
+**What this does not show.** Only the topics were checked for leaks across all tests. Throwaway namespaces and Spark checkpoints were checked at the end and were clean, but a test that is killed part way can still leave things behind, since cleanup runs when a test finishes.
+
+## 2026-10-15: review follow-up, and a Kafka durability bug it led to
+
+An outside review of the repository asked for four things before further work: precise wording about delivery guarantees, Kafka bound to localhost, a test of what happens after Flink's deduplication state expires, and an honest account of which component keeps data unique. Doing them turned up two further problems.
+
+**Wording.** The README said the platform keeps "every revision" and that output is "exactly-once". It now says every *distinct revision the platform observes* (a revision made and replaced between two polls, or before the platform first saw the event, cannot be recovered, and the USGS catalog does not expose earlier ones). It also scopes "exactly-once" to Flink's transactional Kafka writes, and describes the pipeline as checkpointed, transactional stream processing with idempotent Iceberg ingestion. [docs/architecture.md](architecture.md) has a new section on what each hop guarantees.
+
+**Flink state expiry.** Flink's deduplication state is kept for 7 days. To test what happens after that, the retention was shortened to 20 seconds and the same revision was sent, left for 55 seconds, and sent again.
+
+| Stage | Result |
+|---|---|
+| Validated topic before the replay | 1 message (a repeat inside the retention was dropped) |
+| Validated topic after the replay | 2 messages, so Flink had forgotten the revision and let the replay through |
+| Lakehouse after loading both | Bronze 2 rows (every message as received), Silver versions 1, current 1 |
+
+The component that keeps data unique for good is the Iceberg merge on `(event_id, record_hash)`. Flink's filter and the collector's SQLite file keep repeats out of Kafka, and neither is needed for correctness.
+
+**Binding Kafka to localhost.** Kafka and the Flink UI were the only published ports open to the whole network, and Kafka has no authentication. Both are now bound to `127.0.0.1`, and the validator fails if any published port is not. Doing so exposed a weakness: on this machine `localhost` resolves to IPv4 and IPv6, and every connection attempt to the IPv6 address waits 2 seconds before it is refused. Because the broker advertised `localhost:9092`, clients were sent back to the slow path, and a test's availability check failed at random (it made a test skip). Measured: a connection to `127.0.0.1` takes 0.08 s, five in a row. The broker now advertises `127.0.0.1:9092`, every host-side default uses it, and a unit test fails if one goes back to `localhost`.
+
+**Kafka was not storing its data on its volume.** The stack had been shut down with `docker compose down`, and after starting it again the three topics were gone, though the lakehouse, kept in other volumes, was intact (440 live Bronze rows, 1,057 historical, 1,125 versions, 1,074 current events). The cause: the broker's data directory is `/tmp/kafka-logs` inside the container, while the volume `kafka-data` was mounted at a path the broker never used and was empty (4 KB). Data survived a stop and a start, which is all the drills did, and was erased when the container was removed. Earlier statements that `down` keeps the data, and that Kafka's data lives in the `kafka-data` volume, were false for Kafka.
+
+- **Fix:** `KAFKA_LOG_DIRS=/var/lib/kafka/data`. Verified by putting 3 messages in a topic, removing the container with `docker rm -f`, recreating it, and reading the 3 messages back.
+- **Hazard found while checking:** Spark's checkpoint recorded read positions of 149, 155 and 145 in the old validated topic, and the new topic was empty. New messages would have started at offset 0, and Spark would have skipped roughly the first 150 per partition without any error, because it is told to tolerate offset gaps. The Spark checkpoint was deleted. This is safe, because the merges are idempotent. The procedure is in the [recovery runbook](recovery-runbook.md).
+- **What was lost:** the contents of the old topics. 17 revisions had been validated after the last load into the lakehouse and are gone from Kafka, and the collector records them as sent, so it will not resend them. They can be recovered as current state with a backfill, but not as intermediate revisions.
+- **A guard** now fails the configuration check if Kafka's data directory is not a mounted volume, and was shown to fail with the setting removed.
+
+**Spark service.** `docker compose up` with the batch profile started an idle Spark container that exited at once. It is now excluded from `up` and still works with `run`.
+
+**What this does not show.**
+- The earlier failure drills (Kafka outage, Flink worker killed) only stopped and restarted containers. They are valid for that, and say nothing about removing containers, which the persistence drill now covers for Kafka. Flink checkpoints, PostgreSQL and RustFS were confirmed to have survived the removal (the tables, 614 bucket objects and 16 job checkpoint folders were all present).
+- Nothing yet checks that a saved read position is not ahead of a topic. After a topic is recreated, resetting the checkpoint is a manual step.
+- The state-expiry test shortens the retention to 20 seconds instead of waiting 7 days, and was run once.

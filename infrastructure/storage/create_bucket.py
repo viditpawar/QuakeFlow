@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--endpoint", default=os.getenv("S3_ENDPOINT", "http://localhost:9000"))
+    parser.add_argument("--endpoint", default=os.getenv("S3_ENDPOINT", "http://127.0.0.1:9000"))
     parser.add_argument("--bucket", default=os.getenv("WAREHOUSE_BUCKET", "warehouse"))
     args = parser.parse_args()
 

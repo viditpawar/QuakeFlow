@@ -1,5 +1,6 @@
 """Helpers shared by the integration and recovery tests that drive the real Docker stack."""
 
+import contextlib
 import json
 import subprocess
 import time
@@ -17,7 +18,7 @@ SQL_DIR = ROOT / "flink" / "sql"
 SQL_FILES = ("kafka_sources.sql", "validated_events.sql", "revision_tracking.sql")
 JOBMANAGER = "quakeflow-flink-jobmanager"
 TASKMANAGER = "quakeflow-flink-taskmanager"
-BOOTSTRAP = "localhost:9092"
+BOOTSTRAP = "127.0.0.1:9092"
 FIXTURE = ROOT / "tests" / "fixtures" / "usgs_all_hour_sample.geojson"
 BASE_UPDATED = 1791878280000
 
@@ -97,9 +98,17 @@ def create_topics() -> dict:
 def delete_topics(names: dict) -> None:
     for job in running_jobs(f"-{names['suffix']}"):
         cancel_job(job)
-    AdminClient({"bootstrap.servers": BOOTSTRAP}).delete_topics(
-        [names["raw"], names["validated"], names["dlq"]]
+    # Keep the client in a variable until the deletion has finished. Written as a one-liner,
+    # AdminClient(...).delete_topics(...), the client is destroyed as soon as the call returns,
+    # which cancels the request and leaves the topics behind (48 of them were, once).
+    admin = AdminClient({"bootstrap.servers": BOOTSTRAP})
+    futures = admin.delete_topics(
+        [names["raw"], names["validated"], names["dlq"]], operation_timeout=30
     )
+    for future in futures.values():
+        # A topic that is already gone, or a slow broker, must not hide the test's own result.
+        with contextlib.suppress(KafkaException, TimeoutError):
+            future.result(timeout=60)
 
 
 def produce(topic: str, messages: list[tuple[str, str]]) -> None:
@@ -169,7 +178,7 @@ def wait_for_job_state(job_id: str, wanted: str, timeout: int = 120) -> float:
     raise AssertionError(f"job {job_id} did not reach {wanted} within {timeout}s")
 
 
-def job_sql(names: dict, recovery_path: str | None = None) -> str:
+def job_sql(names: dict, recovery_path: str | None = None, state_ttl: str | None = None) -> str:
     sql = "\n".join((SQL_DIR / f).read_text() for f in SQL_FILES)
     suffix = names["suffix"]
     for original, replacement in {
@@ -183,16 +192,20 @@ def job_sql(names: dict, recovery_path: str | None = None) -> str:
     }.items():
         assert original in sql, original
         sql = sql.replace(original, replacement)
+    if state_ttl:
+        original = "SET 'table.exec.state.ttl' = '7 d'"
+        assert original in sql, "the job's state retention setting has changed"
+        sql = sql.replace(original, f"SET 'table.exec.state.ttl' = '{state_ttl}'")
     if recovery_path:
         marker = "SET 'pipeline.name'"
         sql = sql.replace(marker, f"SET 'execution.state-recovery.path' = '{recovery_path}';\n{marker}")
     return sql
 
 
-def submit_job(names: dict, recovery_path: str | None = None) -> str:
+def submit_job(names: dict, recovery_path: str | None = None, state_ttl: str | None = None) -> str:
     """Submit the real job SQL against the test topics. Returns the Flink job id."""
     path = f"/tmp/job_{names['suffix']}_{int(time.time())}.sql"
-    sql = job_sql(names, recovery_path)
+    sql = job_sql(names, recovery_path, state_ttl)
     assert docker("exec", "-i", JOBMANAGER, "sh", "-c", f"cat > {path}", stdin=sql).returncode == 0
     result = docker("exec", JOBMANAGER, "./bin/sql-client.sh", "-f", path)
     assert result.returncode == 0, result.stdout + result.stderr

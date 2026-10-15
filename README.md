@@ -20,7 +20,8 @@ Streaming and batch data engineering on real USGS data, built with Kafka, Flink,
 
 | | |
 |---|---|
-| **What it does** | Collects live and historical earthquake records from USGS, keeps every revision of each event, and serves reliable, quality-checked analytics |
+| **What it does** | Collects live and historical earthquake records from USGS, keeps every distinct revision of each event that it observes, and serves reliable, quality-checked analytics |
+| **Delivery guarantees** | Checkpointed, transactional Kafka stream processing with idempotent Iceberg ingestion and tested replay recovery. The collector delivers at least once, Flink writes to Kafka transactionally, and the Iceberg merges guarantee that each revision is stored once |
 | **Data** | Real, public USGS earthquake feeds and catalog, with no API key. Only the tests use small synthetic fixtures |
 | **Stack** | Python, Apache Kafka, Apache Flink, PySpark, Apache Iceberg, PostgreSQL, Prometheus, Grafana |
 | **Runs on** | One machine with Docker Desktop and about 16 GB of RAM |
@@ -39,7 +40,7 @@ A simple pipeline treats each report as a new earthquake. Here is what happens t
 | 10:42 USGS revises it | 4.8 | reviewed | counts **2 earthquakes** | stores revision 2, current = **4.8** |
 | 10:50 the 10:00 report arrives again, late | 4.6 | automatic | counts **3 earthquakes** | recognises it, current stays **4.8** |
 
-QuakeFlow identifies each revision by a fingerprint of its content, keeps the full history, and always exposes exactly one current version per event. The same rule applies to the live feed, to repeated deliveries, and to historical backfills.
+QuakeFlow identifies each revision by a fingerprint of its content, keeps every distinct revision it observes, and always exposes exactly one current version per event. It can only keep what it sees: a revision made and replaced between two polls, or before the platform first saw the event, is not recoverable from USGS. The same rule applies to the live feed, to repeated deliveries, and to historical backfills.
 
 This matters on real data. In one day, 19 events were revised: 9 changed review status, 7 changed depth, 7 changed location, 7 changed event time and only 5 changed magnitude. A pipeline that watched magnitude alone would have missed most of the changes ([details](docs/verification-log.md)).
 
@@ -70,7 +71,7 @@ flowchart LR
 |---|---|---|
 | **Collector** | Polls two USGS feeds on separate schedules, validates and fingerprints each record, and sends only revisions it has not sent before. A revision counts as sent only after Kafka confirms it | Python, Pydantic, SQLite |
 | **Kafka** | Durable, replayable buffer between the stages. Events are keyed by event id so all revisions of one earthquake stay in order | Apache Kafka (KRaft) |
-| **Flink job** | Validates every message, drops repeats, and routes bad records to a rejected topic with the reason. Output is exactly-once | Flink SQL |
+| **Flink job** | Validates every message, drops repeats, and routes bad records to a rejected topic with the reason. Output is written with Kafka transactions, so it is exactly-once within Flink (the guarantee across the whole pipeline comes from the idempotent merges downstream) | Flink SQL |
 | **Spark load** | Merges Kafka into the lakehouse. Every write is safe to repeat, so a failed or repeated run changes nothing | PySpark, Iceberg |
 | **Backfill** | Downloads historical windows, splits any that exceed the catalog's 20,000-event limit, and records a checksummed manifest per window so it can resume | Python, PySpark |
 | **Quality gate** | Audits the data and the results against a written contract, and publishes analytics only if every check passes | YAML contract, Spark SQL |
@@ -81,7 +82,7 @@ flowchart LR
 | Layer | Holds | Why |
 |---|---|---|
 | **Bronze** | Records exactly as received, with where they came from | Replay and debugging without going back to the source |
-| **Silver** | Every revision of every event, one current row per event, and rejected records with reasons | The trusted record of what happened |
+| **Silver** | Every distinct revision observed of every event, one current row per event, and rejected records with reasons | The trusted record of what happened |
 | **Gold** | Daily activity, regional activity, magnitude distribution, revision statistics, ingestion latency | Ready-to-query analytics, rebuilt only when the quality gate passes |
 
 Tables live in Apache Iceberg, with metadata in PostgreSQL and files in S3-compatible RustFS. More detail, including what each stage guarantees and where its state lives, is in [docs/architecture.md](docs/architecture.md).
@@ -197,7 +198,7 @@ These are stated plainly because they affect how far the results can be trusted.
 
 - **Single machine.** One Kafka broker, one Flink worker, and no JobManager high availability. It survives process failures, not the loss of the machine, and nothing is backed up.
 - **Manual scheduling.** The Spark load and the analytics build run when you run them, and data reaches the lakehouse only then. Nothing restarts the Flink job after a reboot.
-- **At-least-once delivery.** A revision can be sent twice. Repeats are removed by fingerprint, so the results are correct.
+- **At-least-once delivery.** A revision can be sent twice. Repeats are removed by fingerprint, so the results are correct. Flink's own repeat filter forgets after 7 days, so a revision replayed after that passes through Flink again, and the Iceberg merges are what keep it stored once ([architecture](docs/architecture.md#what-is-guaranteed-end-to-end)).
 - **Briefly inconsistent tables during a load.** Each table is a separate commit, so tables can disagree until a load finishes.
 - **Late revisions are not caught yet.** A revision USGS makes after an event leaves the one-day feed is not seen. A scheduled reconciliation job is planned (decision D-003) and not built.
 - **No revision history from the catalog.** The USGS catalog returns each event's current state, so a backfill cannot recover earlier revisions.

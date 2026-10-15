@@ -43,7 +43,7 @@ Start the job, which reads `quakeflow.events.raw` and writes `quakeflow.events.v
 docker exec quakeflow-flink-jobmanager sh -c "cat /opt/flink/sql/kafka_sources.sql /opt/flink/sql/validated_events.sql /opt/flink/sql/revision_tracking.sql > /tmp/job.sql && ./bin/sql-client.sh -f /tmp/job.sql"
 ```
 
-The output topics are written with exactly-once guarantees, so anything reading them must use `isolation.level=read_committed`. The Flink web UI is at http://localhost:8081. To restart a job from a saved checkpoint, see the [recovery runbook](recovery-runbook.md).
+The output topics are written with Kafka transactions, so anything reading them must use `isolation.level=read_committed`. The Flink web UI is at http://localhost:8081. To restart a job from a saved checkpoint, see the [recovery runbook](recovery-runbook.md).
 
 ## 4. Set up the lakehouse
 

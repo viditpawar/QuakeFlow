@@ -8,7 +8,7 @@ An earthquake record is not final when it is published. USGS revises magnitude, 
 
 - A **revision** is identified by the event id plus a SHA-256 hash of its source content (`record_hash`). The hash covers every field USGS controls and excludes anything the platform adds, such as the time it was received (D-009). The same content always gives the same hash, wherever and however often it is seen.
 - **Current state** is one row per event: the revision with the newest `source_updated_at`, and on an exact tie the one with the higher `record_hash`. An older revision never replaces a newer one (D-005).
-- Every distinct revision is kept, so the history can be analysed. Late and conflicting revisions are kept too and are flagged, because dropping them would lose history.
+- Every distinct revision the platform observes is kept, so the history can be analysed. Late and conflicting revisions are kept too and are flagged, because dropping them would lose history. The platform can only keep what it sees: a revision made and replaced between two polls, or before the platform first saw the event, is not recoverable, and the USGS catalog does not expose earlier revisions.
 
 Every stage uses this same rule. That is what makes it safe for data to arrive twice, late, or from two different paths.
 
@@ -18,18 +18,31 @@ Every stage uses this same rule. That is what makes it safe for data to arrive t
 |---|---|---|
 | Collector | Polls the hour feed every 60 s and the day feed every 15 min. Validates each record with Pydantic (strict types, UTC timestamps, coordinate ranges). Computes the hash. Records each unseen revision in SQLite as pending. | A revision is marked sent only when Kafka confirms it (D-008, D-012). An outage leaves it pending to be retried, never lost. Delivery is at-least-once. |
 | Kafka `events.raw` | 3 partitions keyed by event id, so all revisions of one event stay in order. 7 days of retention (D-001). | Durable, replayable input for Flink. |
-| Flink job | Reads the raw text, parses and validates it in SQL, drops repeats of the same `(event_id, record_hash)`, and writes with transactions. 10 second checkpoints (D-014). | Exactly-once output. Invalid messages go to the dead-letter topic with the reason, and a late older revision is still kept. |
+| Flink job | Reads the raw text, parses and validates it in SQL, drops repeats of the same `(event_id, record_hash)`, and writes with transactions. 10 second checkpoints (D-014). | Transactional (exactly-once) writes to Kafka. Invalid messages go to the dead-letter topic with the reason, and a late older revision is still kept. Its repeat filter forgets after 7 days (see below). |
 | Kafka `events.validated`, `events.dlq` | Clean revisions, and rejected messages with their reason and original coordinates. | Readers must use `read_committed`. |
 | Spark load | Reads new messages with Structured Streaming (`availableNow`), then merges into Bronze, Silver versions, Silver current and rejected records (D-018). | Every write is a merge on the table's identity, so a replay or a lost checkpoint changes nothing. |
 | Backfill | Downloads historical windows, splitting any over the catalog's 20,000-event limit. Normalizes with the same code as the live path. Spark merges the completed windows (D-019). | A window counts as done only when its manifest exists and its download still matches its checksum. Overlapping or repeated loads change nothing. |
 | Gold build | Stages five analytics tables as views, audits them, and replaces the tables only if every check passes (D-020). | A failed check publishes nothing and leaves the previous tables in place. |
+
+## What is guaranteed, end to end
+
+No single component makes the whole pipeline exactly-once. Each hop has its own guarantee, and uniqueness in the lakehouse comes from the last one.
+
+| Hop | Guarantee | What can go wrong |
+|---|---|---|
+| Collector to Kafka | At-least-once. A revision stays pending until Kafka confirms it. | A crash between Kafka's confirmation and the SQLite write sends it a second time. |
+| Flink to Kafka | Transactional writes, so a failed or restarted job does not publish half a batch. | Its repeat filter keeps state for 7 days and then forgets. A revision replayed after that passes again. |
+| Kafka to Spark | At-least-once, reading only committed data. | A replay, or a lost Spark checkpoint, reads messages again. |
+| Spark to Iceberg | Idempotent. Every write is a merge on the table's identity. | Nothing is duplicated, but the tables are separate commits and can disagree until a load finishes. |
+
+**Which component guarantees persistent uniqueness?** The Iceberg merges do. A revision is identified by `(event_id, record_hash)`, and merging the same revision any number of times, at any distance in time, stores it once. Flink's repeat filter is a first line of defence that keeps repeats out of the validated topic for a week, and the collector's SQLite file stops it sending them. Neither is needed for correctness. This is tested: with the filter's retention shortened to 20 seconds, a replayed revision passes through Flink a second time and the lakehouse still holds it once (`tests/integration/test_state_expiry.py`).
 
 ## Where state lives
 
 | State | Where | If it is lost |
 |---|---|---|
 | Which revisions were seen and sent | SQLite file `data/quakeflow_state.db` | The collector would resend revisions. Flink and the merges remove the repeats. |
-| Raw, validated and rejected messages | Kafka topics (volume `kafka-data`) | Anything not yet loaded into the lakehouse is gone once it has also left the 7 day retention. |
+| Raw, validated and rejected messages | Kafka topics, stored on the volume `kafka-data` (the broker's data directory is set to it, D-024) | Anything not yet loaded into the lakehouse is gone. The saved read positions of Flink and Spark then point beyond the end of the new, empty topics, and must be reset (see below). |
 | Flink offsets and deduplication state | Checkpoints (volume `flink-checkpoints`) | The job restarts from the start of the topic and emits each revision again. |
 | Spark offsets | Checkpoint (volume `spark-checkpoints`) | The load rereads the topic. The merges make that harmless. |
 | Table metadata | PostgreSQL (volume `postgres-data`) | The tables cannot be found even though their files exist. |
@@ -37,6 +50,8 @@ Every stage uses this same rule. That is what makes it safe for data to arrive t
 | Downloaded historical windows | `data/history/` | Download them again. |
 
 The Iceberg tables are the system of record for analysis. There is no backup of any of these volumes.
+
+**If Kafka's data is lost or the topics are recreated,** the lakehouse keeps everything it had already loaded, but the read positions saved by Spark and Flink refer to offsets that no longer exist. A new message at offset 3 would be skipped without any error by a reader that believes it has already read up to offset 150. So the Spark checkpoint must be deleted and the Flink job started without a recovery path. Both are safe, because the merges are idempotent. The steps are in the [recovery runbook](recovery-runbook.md).
 
 ## The lakehouse
 

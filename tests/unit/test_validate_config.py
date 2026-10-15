@@ -98,3 +98,41 @@ def test_a_private_key_in_a_config_file_is_reported(fake_root):
     (fake_root / ".gitignore").write_text(".env\n")
     (fake_root / "configs" / "oops.txt").write_text("-----BEGIN " + "PRIVATE KEY-----\nabc\n")
     assert any("contains a private key" in p for p in validate.check_for_committed_secrets())
+
+
+def test_a_port_published_on_all_interfaces_is_reported(fake_root):
+    (fake_root / "docker-compose.yml").write_text(
+        "services:\n"
+        "  safe:\n"
+        "    ports:\n"
+        '      - "127.0.0.1:9000:9000"\n'
+        "  open:\n"
+        "    ports:\n"
+        '      - "9092:9092"\n'
+        '      - "127.0.0.1:8081:8081"\n'
+        "  noports:\n"
+        "    image: x\n"
+    )
+    problems = validate.check_ports_bind_to_localhost()
+    assert problems == ["docker-compose.yml: open publishes port 9092:9092 on all interfaces"]
+
+
+def test_the_real_compose_file_publishes_nothing_on_all_interfaces():
+    assert validate.check_ports_bind_to_localhost() == []
+
+
+def test_kafka_writing_outside_a_volume_is_reported(fake_root):
+    compose = fake_root / "docker-compose.yml"
+    base = "services:\n  kafka:\n    image: x\n    volumes:\n      - kafka-data:/var/lib/kafka/data\n"
+    compose.write_text(base)
+    assert "does not set KAFKA_LOG_DIRS" in validate.check_kafka_data_is_on_a_volume()[0]
+
+    compose.write_text(base + "    environment:\n      KAFKA_LOG_DIRS: /tmp/kafka-logs\n")
+    assert "not a mounted volume" in validate.check_kafka_data_is_on_a_volume()[0]
+
+    compose.write_text(base + "    environment:\n      KAFKA_LOG_DIRS: /var/lib/kafka/data\n")
+    assert validate.check_kafka_data_is_on_a_volume() == []
+
+
+def test_the_real_kafka_data_directory_is_on_its_volume():
+    assert validate.check_kafka_data_is_on_a_volume() == []

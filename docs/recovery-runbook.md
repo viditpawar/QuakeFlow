@@ -11,6 +11,7 @@ How to recover the streaming part of QuakeFlow, and what was measured. Timings a
 | Job cancelled or JobManager lost | Resubmit the job from the retained checkpoint (below). | None (tested) |
 | Kafka stopped | The collector keeps unconfirmed revisions pending and sends them when Kafka returns. The Flink job keeps retrying, with a delay that grows to one minute, and resumes by itself. | None (both tested) |
 | Spark load killed part way | Run the load again. Each table is a separate Iceberg commit, so tables can disagree with each other until the retry finishes (see below). | None (tested) |
+| Kafka topics lost or recreated | The lakehouse keeps everything already loaded. The saved read positions of Spark and Flink now point past the end of the empty topics, so they must be reset (below). Revisions published but not yet loaded are gone from Kafka. | Possible, for revisions not yet loaded |
 | Checkpoint volume deleted | The job can only start fresh from `earliest-offset`. Output is reprocessed, so downstream must tolerate repeats. | Repeats possible |
 
 There is no JobManager high availability. If the JobManager container dies, the running job is gone
@@ -58,6 +59,17 @@ a second time. The recovery test confirms this: with the checkpoint, 0 repeats, 
 | 23 s | 400 | 400 | 0 |
 
 After one retry the tables held 400, 400 and 300 rows, with no duplicates and every event's current row being its newest revision. Until the retry finishes, readers can see Bronze ahead of Silver, so treat the lakehouse as consistent only after a load has completed. The `SparkJobNotRunRecently` alert and the `quakeflow_spark_job_success` metric show when a load did not finish.
+
+## Kafka topics lost or recreated
+
+Kafka's data is on the `kafka-data` volume, so it survives `docker compose down` and a restart of the machine. It is lost only if the volume is deleted, or if the topics are deleted and recreated. If that happens:
+
+1. Recreate the topics: `python infrastructure\kafka\create_topics.py`.
+2. Delete the Spark checkpoint: `docker compose --profile batch run --rm --entrypoint rm spark -rf /checkpoints/live`. Without this, Spark believes it has already read up to its old offsets and silently skips the first messages of the new topics.
+3. Start the Flink job **without** a recovery path, because every saved checkpoint holds offsets of the old topics.
+4. Revisions that had been published to Kafka but not yet loaded are gone. Recover the current state of recent events with a backfill, for example `python -m batch.backfill --start <day> --end <day after tomorrow>`, then load it. A backfill returns each event as it is now, so it cannot recover revisions that were replaced in between.
+
+This was learned the hard way: the data volume was mounted but Kafka was writing somewhere else, so the first `docker compose down` erased every topic (D-024).
 
 ## Reading the result
 

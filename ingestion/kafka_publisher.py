@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 RAW_TOPIC = "quakeflow.events.raw"
 SOURCE_NAME = "usgs"
 SCHEMA_VERSION = "1"
-DEFAULT_BOOTSTRAP = "localhost:9092"
+# 127.0.0.1, not localhost: localhost can resolve to IPv6 first, where each attempt waits 2 s on Docker Desktop.
+DEFAULT_BOOTSTRAP = "127.0.0.1:9092"
 
 
 def build_producer(bootstrap_servers: str | None = None) -> Producer:

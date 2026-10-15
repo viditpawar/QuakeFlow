@@ -102,6 +102,41 @@ def check_env_example_covers_compose() -> list[str]:
     return [f".env.example does not mention {name}, which docker-compose.yml reads" for name in sorted(used - documented)]
 
 
+def check_ports_bind_to_localhost() -> list[str]:
+    """Every published port must bind to 127.0.0.1. Kafka and the other services here have no
+    authentication, so a port bound to all interfaces would be open to the whole network."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    problems = []
+    for name, service in (compose.get("services") or {}).items():
+        for port in service.get("ports") or []:
+            text = str(port)
+            if not text.startswith("127.0.0.1:"):
+                problems.append(f"docker-compose.yml: {name} publishes port {text} on all interfaces")
+    return problems
+
+
+def check_kafka_data_is_on_a_volume() -> list[str]:
+    """Kafka's data directory must be a mounted volume. The image's default is /tmp inside the
+    container, so a volume that is mounted but not used leaves every topic to be erased whenever the
+    container is removed (docker compose down), which is what happened once."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    kafka = (compose.get("services") or {}).get("kafka")
+    if kafka is None:
+        return []
+    environment = kafka.get("environment") or {}
+    log_dirs = environment.get("KAFKA_LOG_DIRS")
+    volume_paths = [
+        str(entry).split(":")[1]
+        for entry in kafka.get("volumes") or []
+        if not str(entry).startswith((".", "/", "~")) and ":" in str(entry)
+    ]
+    if log_dirs is None:
+        return ["docker-compose.yml: kafka does not set KAFKA_LOG_DIRS, so it writes inside the container"]
+    if log_dirs not in volume_paths:
+        return [f"docker-compose.yml: kafka writes to {log_dirs}, which is not a mounted volume ({volume_paths})"]
+    return []
+
+
 def check_for_committed_secrets() -> list[str]:
     """Catch the obvious mistakes: a real .env, or a private key, in the working tree."""
     problems = []
@@ -123,6 +158,8 @@ CHECKS = (
     check_dashboards,
     check_application_configs,
     check_env_example_covers_compose,
+    check_ports_bind_to_localhost,
+    check_kafka_data_is_on_a_volume,
     check_for_committed_secrets,
 )
 
