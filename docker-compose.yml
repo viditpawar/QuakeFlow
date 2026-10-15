@@ -40,6 +40,33 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # The USGS collector. Exactly one instance may run: its SQLite state has a single writer, and a
+  # second collector would send every revision twice. Kafka is reached by service name, because
+  # 127.0.0.1 inside this container would mean the container itself.
+  collector:
+    build:
+      context: .
+      dockerfile: docker/collector.Dockerfile
+    image: quakeflow/collector:0.1.0
+    container_name: quakeflow-collector
+    profiles: ["core"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:9108:9108"   # Prometheus metrics, this machine only
+    volumes:
+      - collector-state:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    restart: unless-stopped
+
   # Stream processing. Start together with Kafka:
   #   docker compose --profile core --profile streaming up -d
   flink-jobmanager:
@@ -189,8 +216,6 @@ services:
       - --storage.tsdb.retention.size=1GB
     ports:
       - "127.0.0.1:9090:9090"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"   # the collector runs on the host
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -241,6 +266,7 @@ services:
 
 volumes:
   kafka-data:
+  collector-state:
   flink-checkpoints:
   postgres-data:
   rustfs-data:

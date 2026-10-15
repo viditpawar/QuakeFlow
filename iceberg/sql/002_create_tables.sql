@@ -11,7 +11,8 @@
 
 -- Messages from quakeflow.events.validated. The payload is the Kafka message text exactly as
 -- received. It is the collector's normalized event, not the original USGS feature, which the
--- collector does not forward. A message is identified by its Kafka topic, partition and offset.
+-- collector does not forward. A message is identified by its Kafka topic, partition and offset
+-- together with its text, because offsets are reused if a topic is recreated.
 CREATE TABLE IF NOT EXISTS local.bronze.live_observations (
     kafka_topic       STRING    COMMENT 'Source topic',
     kafka_partition   INT       COMMENT 'Source partition',

@@ -67,9 +67,19 @@ Kafka's data is on the `kafka-data` volume, so it survives `docker compose down`
 1. Recreate the topics: `python infrastructure\kafka\create_topics.py`.
 2. Delete the Spark checkpoint: `docker compose --profile batch run --rm --entrypoint rm spark -rf /checkpoints/live`. Without this, Spark believes it has already read up to its old offsets and silently skips the first messages of the new topics.
 3. Start the Flink job **without** a recovery path, because every saved checkpoint holds offsets of the old topics.
-4. Revisions that had been published to Kafka but not yet loaded are gone. Recover the current state of recent events with a backfill, for example `python -m batch.backfill --start <day> --end <day after tomorrow>`, then load it. A backfill returns each event as it is now, so it cannot recover revisions that were replaced in between.
+4. Revisions that had been sent to Kafka but not yet loaded into the lakehouse are gone from Kafka, but the collector keeps the full content of every revision it sends, so it can send them again. Stop the collector, list what the lakehouse holds, and mark the sent revisions that are missing from it as unsent. The first run is a dry run:
 
-This was learned the hard way: the data volume was mounted but Kafka was writing somewhere else, so the first `docker compose down` erased every topic (D-024).
+```powershell
+docker compose --profile core stop collector
+docker compose --profile batch run --rm -T spark /opt/spark/bin/spark-sql -e "SELECT event_id, record_hash FROM local.silver.earthquake_versions" > data\known_revisions.tsv
+docker compose --profile core run --rm --no-deps -v ${PWD}/data:/import:ro collector python -m ingestion.resend --known /import/known_revisions.tsv
+docker compose --profile core run --rm --no-deps -v ${PWD}/data:/import:ro collector python -m ingestion.resend --known /import/known_revisions.tsv --apply
+docker compose --profile core up -d collector
+```
+
+   The collector sends them when it starts, Flink validates them, and the next Spark load brings them into the lakehouse. The command refuses an empty list, and refuses to resend more than 1000 revisions unless told to. Run a Spark load first: a revision that was sent a moment ago and has not been loaded yet looks missing, and is listed too. Resending it is harmless, because the merges ignore repeats, but it is not what you are repairing. The lakehouse also holds revisions from backfills that the collector never sent, and those are correctly ignored. If the collector's state file is gone too, fall back to a backfill, for example `python -m batch.backfill --start <day> --end <day after tomorrow>`. A backfill returns each event as it is now, so it cannot recover revisions that were replaced in between.
+
+Bronze identifies a message by its topic, partition, offset **and its text**, so messages in a recreated topic, which reuse old offsets, are still recorded (D-026). This was learned the hard way: the data volume was mounted but Kafka was writing somewhere else, so the first `docker compose down` erased every topic (D-024).
 
 ## Reading the result
 

@@ -104,11 +104,16 @@ SELECT
 FROM checked_messages
 WHERE reject_reason IS NOT NULL;
 
+-- A Kafka offset is unique only while a topic exists. If a topic is deleted and recreated, new
+-- messages reuse old topic, partition and offset values, and matching on those alone would skip
+-- them as already loaded. The message text is part of the identity so they are not skipped. Replays
+-- of the same message still match, because they have the same text.
 MERGE INTO local.bronze.live_observations AS t
 USING incoming_bronze AS s
 ON t.kafka_topic = s.kafka_topic
    AND t.kafka_partition = s.kafka_partition
    AND t.kafka_offset = s.kafka_offset
+   AND t.payload <=> s.payload
 WHEN NOT MATCHED THEN INSERT *;
 
 -- A revision is identified by (event_id, record_hash). The hash covers event_time, so the
@@ -137,4 +142,5 @@ ON t.stage = s.stage
    AND t.kafka_topic = s.kafka_topic
    AND t.kafka_partition = s.kafka_partition
    AND t.kafka_offset = s.kafka_offset
+   AND t.payload <=> s.payload
 WHEN NOT MATCHED THEN INSERT *;

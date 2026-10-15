@@ -173,7 +173,7 @@ The component that keeps data unique for good is the Iceberg merge on `(event_id
 
 - **Fix:** `KAFKA_LOG_DIRS=/var/lib/kafka/data`. Verified by putting 3 messages in a topic, removing the container with `docker rm -f`, recreating it, and reading the 3 messages back.
 - **Hazard found while checking:** Spark's checkpoint recorded read positions of 149, 155 and 145 in the old validated topic, and the new topic was empty. New messages would have started at offset 0, and Spark would have skipped roughly the first 150 per partition without any error, because it is told to tolerate offset gaps. The Spark checkpoint was deleted. This is safe, because the merges are idempotent. The procedure is in the [recovery runbook](recovery-runbook.md).
-- **What was lost:** the contents of the old topics. 17 revisions had been validated after the last load into the lakehouse and are gone from Kafka, and the collector records them as sent, so it will not resend them. They can be recovered as current state with a backfill, but not as intermediate revisions.
+- **What was lost:** the contents of the old topics. 23 revisions (not the 17 first reported) had been sent to Kafka but not yet loaded into the lakehouse. They were recovered in full, not only as current state as first stated, from the collector's state file, which keeps the content of every revision it sends (see the entry on the collector container below).
 - **A guard** now fails the configuration check if Kafka's data directory is not a mounted volume, and was shown to fail with the setting removed.
 
 **Spark service.** `docker compose up` with the batch profile started an idle Spark container that exited at once. It is now excluded from `up` and still works with `run`.
@@ -182,3 +182,41 @@ The component that keeps data unique for good is the Iceberg merge on `(event_id
 - The earlier failure drills (Kafka outage, Flink worker killed) only stopped and restarted containers. They are valid for that, and say nothing about removing containers, which the persistence drill now covers for Kafka. Flink checkpoints, PostgreSQL and RustFS were confirmed to have survived the removal (the tables, 614 bucket objects and 16 job checkpoint folders were all present).
 - Nothing yet checks that a saved read position is not ahead of a topic. After a topic is recreated, resetting the checkpoint is a manual step.
 - The state-expiry test shortens the retention to 20 seconds instead of waiting 7 days, and was run once.
+
+## 2026-10-15: Kafka persistence drills, the collector container, and a Bronze bug
+
+**Kafka persistence, with both ways of removing the container.** After the data loss described above, persistence was tested by destroying the Kafka container and comparing the data before and after. It is now an automated test (`tests/recovery/test_kafka_persistence.py`) that runs both paths, because they are different lifecycles:
+
+| Path | What it does |
+|---|---|
+| `docker rm -f quakeflow-kafka` | Removes the container at once, like losing it in a crash. |
+| `docker compose --profile core down kafka` | The documented way to take the service down. It removes the container and keeps the volumes. |
+
+Each run creates a topic with 3 partitions, writes 12 messages, records the end offset of every partition, destroys the container, checks that it is gone and that the volume `quakeflow_kafka-data` still exists, starts Kafka again, and reads everything back.
+
+| Path | End offsets before | End offsets after | Messages before | Messages after |
+|---|---|---|---|---|
+| `docker rm -f` | {0: 5, 1: 2, 2: 5} | {0: 5, 1: 2, 2: 5} | 12 | 12 |
+| `docker compose down kafka` | {0: 5, 1: 2, 2: 5} | {0: 5, 1: 2, 2: 5} | 12 | 12 |
+
+**Control against the original fault.** With `KAFKA_LOG_DIRS` removed, which is the original misconfiguration, the same test failed with `assert {} == {0: 5, 1: 2, 2: 5}`: after the container was recreated the topic was simply gone. The setting was restored, and the real topics became visible again, because the data had been in the volume all along. Not tested: `docker compose down` for the whole stack at once (the Kafka-only form was used so the test does not take the rest of the stack down), and `down -v`, which deletes the volumes by design.
+
+**Collector as a container.** The collector now runs as `quakeflow-collector`. Its state was migrated as follows:
+
+1. The host process was confirmed stopped, and the state file was copied with SQLite's backup command, leaving the original byte-for-byte unchanged (checked by hash). The copy held 463 revisions, all recorded as sent, and passed an integrity check.
+2. The Silver versions table was compared with it: **23 revisions** had been sent to Kafka but were not in the lakehouse, published between 13:29 and 14:50 local time on 14 October. They include intermediate revisions that a backfill could not return (for example one event revised three times).
+3. Those 23 were marked unsent in the copy, the copy was placed in the new volume with the container user's ownership, and it was read back from inside the volume with the collector's own code: 23 pending.
+4. A fresh Flink job was started without a recovery path, then the collector. It sent 24 revisions (the 23 plus 1 new one) and then 184 new events from the day feed, which covered almost exactly the day the collector had been off. Flink passed all 208 on, and the Spark load processed 208 messages, none rejected.
+5. Check: the collector's state file lists 648 revisions as sent and none pending, and **0 of them are missing from the lakehouse**.
+
+The container reported healthy, using 34 MiB of its 384 MiB limit, as user 10001, with a read-only root filesystem and no added capabilities. Prometheus scrapes it at `collector:9108` and all six scrape targets are up. This corrects two earlier statements: the number of lost revisions (23, not 17), and that only a backfill could recover them.
+
+**A bug found by checking the counts: Bronze skipped 208 messages.** After the load, Silver had grown by 208 but Bronze was still at 440 rows. Bronze identified messages by topic, partition and offset, and the recreated topic reused offsets that Bronze already held (up to 153 in the old topic, 0 to 79 in the new one), so all 208 were skipped as already loaded, without any error. A test now recreates a topic and writes different messages at the same offsets: against the old merge it failed with Bronze at 3 rows where 6 were expected, and against the fix (the message text is part of the identity, D-026) it passes with 6. The real Bronze table was repaired by resetting the Spark checkpoint and loading again: Bronze 440 to 651 (the 208 skipped plus 3 new), Silver versions 1,333 to 1,336 and current 1,268 to 1,270, which are the same 3 new revisions. Nothing else changed.
+
+**The resend command.** The repair in step 2 is now `python -m ingestion.resend`. It was run through Compose for real, as in the runbook. With the lakehouse's list it reported 1 sent revision missing, which was a revision sent a moment earlier and not yet loaded (so the runbook now says to run a load first). With 5 revisions that the collector had really sent removed from the list, it reported exactly those 5 plus the in-flight one. An empty list was refused with exit code 2, and nothing was applied in any of these runs. An earlier version of this control removed the wrong revisions (ones that only came from a backfill) and proved nothing, so it was redone.
+
+**What this does not show.**
+- That only one collector runs is not enforced beyond the fixed container name and the documentation.
+- The restart policy and the unhealthy path of the health check were not exercised on the real container. The health logic is unit-tested, including a loop that has stopped.
+- The new CI checks for the collector image were run locally and have not run on GitHub.
+- The state file is on one volume with no backup.

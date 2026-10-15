@@ -41,7 +41,7 @@ No single component makes the whole pipeline exactly-once. Each hop has its own 
 
 | State | Where | If it is lost |
 |---|---|---|
-| Which revisions were seen and sent | SQLite file `data/quakeflow_state.db` | The collector would resend revisions. Flink and the merges remove the repeats. |
+| Which revisions were seen and sent | SQLite file on the volume `collector-state`, mounted in the collector container. It holds the full content of every revision | The collector would resend revisions. Flink and the merges remove the repeats. Because it keeps the content, it can also resend revisions that Kafka lost, by marking them unsent (D-025). |
 | Raw, validated and rejected messages | Kafka topics, stored on the volume `kafka-data` (the broker's data directory is set to it, D-024) | Anything not yet loaded into the lakehouse is gone. The saved read positions of Flink and Spark then point beyond the end of the new, empty topics, and must be reset (see below). |
 | Flink offsets and deduplication state | Checkpoints (volume `flink-checkpoints`) | The job restarts from the start of the topic and emits each revision again. |
 | Spark offsets | Checkpoint (volume `spark-checkpoints`) | The load rereads the topic. The merges make that harmless. |
@@ -95,4 +95,3 @@ Measured on a 16 GB Windows laptop with Docker Desktop, with the whole stack run
 - **High availability and backups.** One broker, one worker, one JobManager, and no backups.
 - **Alert delivery.** Prometheus evaluates the alert rules, but nothing is sent anywhere (D-021).
 - **Direct Flink-to-Iceberg writes.** The alternative route in the design guide.
-- **A containerized collector.** It runs as a process on the host.

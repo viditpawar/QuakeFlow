@@ -123,6 +123,27 @@ class ChangeDetector:
             )
         return cursor.rowcount == 1
 
+    def mark_unsent_unless_known(
+        self, known: set[tuple[str, str]], dry_run: bool = True
+    ) -> list[tuple[str, str]]:
+        """Make revisions that were sent, but are not in `known`, pending again, and return them.
+
+        `known` is the set of (event_id, record_hash) pairs that downstream already holds, for example
+        read from the lakehouse. This repairs the case where Kafka lost messages that were confirmed
+        and so recorded as sent: the revisions are resent, in full, because the content of every
+        revision is kept here. With dry_run (the default) nothing is changed.
+        """
+        rows = self._db.execute(
+            "SELECT event_id, record_hash FROM observations WHERE published_at IS NOT NULL ORDER BY rowid"
+        ).fetchall()
+        missing = [(event_id, record_hash) for event_id, record_hash in rows if (event_id, record_hash) not in known]
+        if missing and not dry_run:
+            with self._db:
+                self._db.executemany(
+                    "UPDATE observations SET published_at = NULL WHERE event_id = ? AND record_hash = ?", missing
+                )
+        return missing
+
     def pending_count(self) -> int:
         return self._db.execute(
             "SELECT COUNT(*) FROM observations WHERE published_at IS NULL"

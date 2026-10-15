@@ -119,14 +119,16 @@ pip install -e ".[dev]"
 **2. Start Kafka and create its topics**
 
 ```powershell
-docker compose --profile core up -d
+docker compose --profile core up -d --build
 python infrastructure\kafka\create_topics.py
 ```
 
 **3. Collect real earthquakes**
 
+The collector started with Kafka. Watch it poll USGS and publish:
+
 ```powershell
-python -m ingestion.live.poller --once
+docker logs --tail 6 quakeflow-collector
 ```
 
 You should see one line per feed, then Kafka confirming delivery. The numbers depend on what USGS has published, and the day feed holds far more events than the hour feed. For example:

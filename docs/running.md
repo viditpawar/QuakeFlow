@@ -24,12 +24,14 @@ pip install -e ".[dev]"
 ## 2. Collect live data
 
 ```powershell
-docker compose --profile core up -d
+docker compose --profile core up -d --build    # Kafka and the collector
 python infrastructure\kafka\create_topics.py   # first time only, safe to repeat
-python -m ingestion.live.poller                # runs until stopped
+docker logs -f quakeflow-collector             # watch it poll and publish
 ```
 
-The collector polls the hour feed every 60 seconds and the day feed every 15 minutes (`configs/sources.yaml`). Flags: `--once` polls every feed a single time and exits (non-zero if Kafka did not confirm everything), `--no-publish` only detects changes without contacting Kafka, and `--metrics-port` sets the port for its Prometheus endpoint (default 9108, off with `--once`). Its state is kept in `data/quakeflow_state.db`, which is not committed.
+The collector runs as a container (`quakeflow-collector`) and restarts by itself. It polls the hour feed every 60 seconds and the day feed every 15 minutes (`configs/sources.yaml`). Its state, which revisions it has seen and sent, is a SQLite file on the volume `collector-state`, so it survives the container being removed. If the topics do not exist yet when it starts, its revisions simply wait and are delivered once you have created them.
+
+**Run exactly one collector.** Its state has a single writer, and two collectors would each send every revision. For development you can run one on the host instead, with `python -m ingestion.live.poller` (flags: `--once` polls each feed a single time and exits, `--no-publish` only detects changes). It then uses `data/quakeflow_state.db` and a host Kafka address of `127.0.0.1:9092`. Stop the container first with `docker compose --profile core stop collector`. Note that the file `data/quakeflow_state.db` on the host is the state from before the collector moved into a container and is no longer current: the live state is on the volume `collector-state`. Starting a host collector from the old file would resend everything the container has sent since.
 
 ## 3. Validate and deduplicate with Flink
 

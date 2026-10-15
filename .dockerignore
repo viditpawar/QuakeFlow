@@ -1,0 +1,9 @@
+# Keep the build context small and free of local state. Images copy only what their Dockerfile names.
+.git
+.venv
+data
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+*.egg-info

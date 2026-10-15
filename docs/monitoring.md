@@ -4,7 +4,7 @@ Prometheus collects the numbers, Grafana shows them, and a set of alert rules sa
 
 ```powershell
 docker compose --profile core --profile streaming --profile batch --profile monitoring up -d
-python -m ingestion.live.poller        # serves collector metrics on http://127.0.0.1:9108/metrics
+# the collector container serves its metrics on http://127.0.0.1:9108/metrics
 $env:PUSHGATEWAY_URL = "http://pushgateway:9091"   # lets the Spark jobs report to Prometheus
 ```
 
@@ -21,7 +21,7 @@ Everything binds to localhost. Measured with the whole stack running, the four m
 
 | Source | How it is collected |
 |---|---|
-| Collector | The collector process serves `/metrics` and Prometheus scrapes it. The collector runs on the host, so Prometheus reaches it through `host.docker.internal`. |
+| Collector | The collector container serves `/metrics` and Prometheus scrapes it by its service name, `collector:9108`. |
 | Flink | Flink's built-in Prometheus reporter on port 9249 of the JobManager and TaskManager. |
 | Kafka consumer lag | `kafka-exporter`, which reports lag per consumer group, topic and partition. |
 | Spark jobs | The jobs are one-off containers, so each pushes its result to the Pushgateway when it finishes. Pushing is off unless `PUSHGATEWAY_URL` is set, and a failed push never fails the job. |

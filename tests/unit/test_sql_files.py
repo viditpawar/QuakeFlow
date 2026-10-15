@@ -164,3 +164,17 @@ def test_the_flink_retry_delay_is_capped_so_recovery_after_an_outage_is_quick():
     settings = _flink_settings()
     assert settings["restart-strategy.exponential-delay.max-backoff"] in {"30 s", "1 min", "60 s"}
     assert settings["restart-strategy.exponential-delay.initial-backoff"] == "10 s"
+
+
+def test_bronze_and_rejected_merges_include_the_message_text_in_their_identity():
+    # Kafka offsets are reused when a topic is recreated, so coordinates alone skip new messages (D-024).
+    live = "\n".join(load_statements(SQL_DIR / "003_merge_current.sql"))
+    flink = "\n".join(load_statements(SQL_DIR / "003_merge_flink_rejected.sql"))
+    for name, text, target in (
+        ("live bronze", live, "local.bronze.live_observations"),
+        ("spark rejected", live, "local.silver.rejected_records"),
+        ("flink rejected", flink, "local.silver.rejected_records"),
+    ):
+        merges = [s for s in text.split("MERGE INTO")[1:] if s.strip().startswith(target)]
+        assert merges, name
+        assert all("t.payload <=> s.payload" in m for m in merges), f"{name} merge ignores the message text"

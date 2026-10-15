@@ -1,0 +1,9 @@
+# Direct dependencies of the collector. The hash-locked list in collector-requirements.txt is generated from
+# this file, in a Linux container with the same Python as the image:
+#   docker run --rm -v "${PWD}/docker:/work" -w /work python:3.11.17-slim-bookworm sh -c \
+#     "pip install --quiet pip-tools && pip-compile --quiet --generate-hashes --allow-unsafe collector-requirements.in -o collector-requirements.txt"
+confluent-kafka>=2.5
+prometheus-client>=0.21
+pydantic>=2.7
+pyyaml>=6.0
+requests>=2.32

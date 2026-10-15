@@ -8,7 +8,7 @@ Iceberg has no primary keys. Each table's "identity" below is enforced by the ME
 ## Bronze: data as received
 
 ### `bronze.live_observations`
-Messages from the `quakeflow.events.validated` Kafka topic. Identity: `(kafka_topic, kafka_partition, kafka_offset)`. Partitioned by day of `loaded_at`.
+Messages from the `quakeflow.events.validated` Kafka topic. Identity: `(kafka_topic, kafka_partition, kafka_offset, payload)`. The message text is part of the identity because Kafka offsets are reused if a topic is recreated, and matching on the coordinates alone would skip the new messages as already loaded (D-026). Partitioned by day of `loaded_at`.
 
 | Column | Meaning |
 |---|---|

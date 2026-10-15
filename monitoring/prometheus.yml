@@ -12,11 +12,10 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # The collector runs on the host (python -m ingestion.live.poller), not in a container.
-  # host.docker.internal is how a container reaches the host on Docker Desktop.
+  # The collector container, reached by its Compose service name.
   - job_name: quakeflow-collector
     static_configs:
-      - targets: ["host.docker.internal:9108"]
+      - targets: ["collector:9108"]
 
   # Flink's built-in Prometheus reporter, enabled in docker-compose.yml.
   - job_name: flink

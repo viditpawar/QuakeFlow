@@ -25,4 +25,5 @@ ON t.stage = s.stage
    AND t.kafka_topic = s.kafka_topic
    AND t.kafka_partition = s.kafka_partition
    AND t.kafka_offset = s.kafka_offset
+   AND t.payload <=> s.payload
 WHEN NOT MATCHED THEN INSERT *;
