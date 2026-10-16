@@ -238,3 +238,20 @@ The container reported healthy, using 34 MiB of its 384 MiB limit, as user 10001
 - The reconciled revisions travel the live path, so in `gold.ingestion_latency` they appear as live revisions with a long delay (up to two days for the first run) and raise its maximum and 95th percentile.
 - A window with more than 20,000 updated events fails the run instead of being split.
 - Nothing alerts yet when the outbox stops being read or the watermark stops moving.
+
+## 2026-10-16: historical backfill DAG
+
+**What was run.** `historical_backfill` with 2025-02-01 to 2025-02-08 and a minimum magnitude of 4.5, against the real USGS catalog and lakehouse.
+
+| Check | Result |
+|---|---|
+| Tasks | Validate, preflight, download, ingest, verify and Gold all succeeded. |
+| Download and load | 1 window, 169 features, 169 distinct revisions, 0 rejected. |
+| Verification | 169 distinct revisions downloaded, 0 missing from Silver. |
+| Gold | Promoted, 24 checks passed, from the Silver snapshots the load recorded. |
+| Unit tests | Parameter validation (every problem reported), window selection by range and magnitude, count consistency, the pool and the DAG shape. |
+
+**What this does not show.**
+- The same range was not run a second time, so the skip of a complete window was not seen in Airflow (it is unit-tested in `batch/backfill.py`).
+- A failed download, a rejected parameter set and a failed verification were not run live.
+- The negative control for the verification (deleting a revision from Silver and seeing the DAG fail) was not run.

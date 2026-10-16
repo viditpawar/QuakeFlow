@@ -134,3 +134,20 @@ This keeps the data. Add `-v` to also delete the volumes, which erases Kafka, th
 
 - The Spark image runs Python 3.10, so code in `batch/` that runs there (everything except `backfill.py`) must not use features that need 3.11. A unit test checks this.
 - The Flink job and the Spark load do not start by themselves after a restart. Start them again with the commands above.
+
+## Airflow: scheduling, reconciliation and backfill
+
+Start it with `python scripts/airflow_setup.py` once, then `docker compose --profile batch --profile orchestration up -d`. The UI is at http://127.0.0.1:8080 (user `quakeflow`, password in `secrets/airflow_passwords.json`). All DAGs are created paused.
+
+| DAG | When | What |
+|---|---|---|
+| `incremental_pipeline` | every 30 minutes | Preflight, Spark ingestion, quality gate and Gold. |
+| `reconciliation` | every 6 hours | Asks USGS for everything updated since the watermark (minus 48 hours) and hands it to the collector through the outbox (D-029). |
+| `historical_backfill` | by hand | Downloads a date range, loads it, verifies it is in Silver, builds Gold (D-030). |
+
+```powershell
+docker exec quakeflow-airflow-scheduler airflow dags trigger historical_backfill --conf '{"start": "2025-02-01", "end": "2025-02-08", "min_magnitude": 4.5}'
+```
+
+`end` is the day after the last day wanted. Leave `min_magnitude` out for all magnitudes. Spark containers run one at a time, across all DAGs, so a backfill waits for a running load and the other way round.
+

@@ -269,11 +269,17 @@ def parse_date(text: str) -> date:
     return date.fromisoformat(text)
 
 
+def parse_magnitude(text: str) -> float | None:
+    """A minimum magnitude, or None for all magnitudes. An empty text means none, so an orchestrator can pass
+    the option with no value."""
+    return None if text.strip() == "" else float(text)
+
+
 def main(argv: list[str] | None = None, client: FdsnClient | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--start", type=parse_date, required=True, help="first day, YYYY-MM-DD")
     parser.add_argument("--end", type=parse_date, required=True, help="day after the last, YYYY-MM-DD")
-    parser.add_argument("--min-magnitude", type=float, default=None)
+    parser.add_argument("--min-magnitude", type=parse_magnitude, default=None)
     parser.add_argument("--window-days", type=int, default=7)
     parser.add_argument("--out-dir", type=Path, default=Path(DEFAULT_OUT_DIR))
     parser.add_argument("--pause", type=float, default=1.0, help="seconds between requests")

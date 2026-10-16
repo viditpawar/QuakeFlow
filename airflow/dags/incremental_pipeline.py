@@ -36,6 +36,7 @@ def spark_task(task_id: str, script: str, *arguments: str, **kwargs) -> DockerOp
         network_mode=NETWORK,
         mounts=[Mount(source=CHECKPOINT_VOLUME, target="/checkpoints", type="volume")],
         mount_tmp_dir=False,  # the default bind-mounts a temp folder from the Airflow container's file system
+        pool="quakeflow_spark",  # one Spark container at a time, across all DAGs
         auto_remove="success",  # a failed container stays for "docker logs"
         mem_limit="2g",
         environment={

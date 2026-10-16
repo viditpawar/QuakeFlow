@@ -233,3 +233,64 @@ def test_only_the_collector_service_uses_the_outbox_volume_in_compose():
     assert users == ["collector"]
     assert "reconcile-outbox" in COMPOSE["volumes"]
     assert "QUAKEFLOW_OUTBOX_DIR=/outbox" in (ROOT / "docker" / "collector.Dockerfile").read_text(encoding="utf-8").replace(" \\n    ", "\n").replace(" ", "")
+
+
+# --- backfill ---------------------------------------------------------------------------------
+
+from datetime import date
+
+from quakeflow_orchestration.backfill_params import validate_backfill
+
+TODAY = date(2026, 10, 16)
+
+
+def test_good_backfill_parameters_are_normalized():
+    assert validate_backfill("2025-01-01", "2025-01-08", 4.5, TODAY) == {
+        "start": "2025-01-01", "end": "2025-01-08", "min_magnitude": 4.5}
+    assert validate_backfill("2025-01-01", "2025-01-08", None, TODAY)["min_magnitude"] is None
+    assert validate_backfill("2025-01-01", "2025-01-08", "", TODAY)["min_magnitude"] is None
+    assert validate_backfill("2025-01-01", "2025-01-08", "3", TODAY)["min_magnitude"] == 3.0
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "magnitude", "fragment"),
+    [
+        ("2025-01-08", "2025-01-01", None, "start must be before end"),
+        ("2025-01-01", "2025-01-01", None, "start must be before end"),
+        ("yesterday", "2025-01-01", None, "start must be a date"),
+        ("2025-01-01", "2025-13-45", None, "end must be a date"),
+        ("2024-01-01", "2026-01-01", None, "limit is 366"),
+        ("2026-10-01", "2026-12-01", None, "in the future"),
+        ("2025-01-01", "2025-01-08", "abc", "must be a number"),
+        ("2025-01-01", "2025-01-08", 11, "outside -2 to 10"),
+        ("2025-01-01", "2025-01-08", True, "must be a number"),
+    ],
+)
+def test_bad_backfill_parameters_are_refused_with_the_reason(start, end, magnitude, fragment):
+    with pytest.raises(ValueError, match=fragment):
+        validate_backfill(start, end, magnitude, TODAY)
+
+
+def test_every_problem_is_reported_not_only_the_first():
+    with pytest.raises(ValueError) as raised:
+        validate_backfill("x", "y", "z", TODAY)
+    assert str(raised.value).count(";") == 2
+
+
+def test_the_backfill_dag_has_the_agreed_shape():
+    source = (ROOT / "airflow" / "dags" / "historical_backfill.py").read_text(encoding="utf-8")
+    assert "schedule=None" in source and "max_active_runs=1" in source
+    assert "validate_parameters() >> preflight() >> download >> ingest >> verify >> gold" in source
+    assert source.count('pool="quakeflow_spark"') == 1 and "spark_task(" in source
+    assert 'read_only=read_only' in source and "history_read_only: bool = True" in source, "Spark only reads the files"
+
+
+def test_every_spark_task_is_in_the_one_slot_pool_and_the_pool_is_created():
+    for dag in ("incremental_pipeline.py", "historical_backfill.py"):
+        assert 'pool="quakeflow_spark"' in (ROOT / "airflow" / "dags" / dag).read_text(encoding="utf-8")
+    assert "airflow pools set quakeflow_spark 1" in " ".join(COMPOSE["services"]["airflow-migrate"]["command"])
+
+
+def test_the_collector_image_carries_only_the_backfill_from_batch():
+    text = (ROOT / "docker" / "collector.Dockerfile").read_text(encoding="utf-8")
+    assert "COPY batch/backfill.py" in text and "COPY batch " not in text and "mkdir -p /data /outbox /history" in text

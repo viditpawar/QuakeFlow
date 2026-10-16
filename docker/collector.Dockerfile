@@ -10,16 +10,19 @@ RUN --mount=type=bind,source=docker/collector-requirements.txt,target=/tmp/requi
     pip install --no-cache-dir --require-hashes --root-user-action=ignore -r /tmp/requirements.txt
 
 # Runs as an unprivileged user. /data is the volume holding the collector's SQLite state and /outbox the
-# volume shared with Airflow for reconciliation batches. Both are created here and owned by that user so a
-# new named volume mounted on them is writable.
+# volume shared with Airflow for reconciliation batches, and /history holds the files of a backfill. All are
+# created here and owned by that user so a new named volume mounted on them is writable.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin quakeflow \
-    && mkdir -p /data /outbox \
-    && chown 10001:10001 /data /outbox
+    && mkdir -p /data /outbox /history \
+    && chown 10001:10001 /data /outbox /history
 
 WORKDIR /app
 COPY ingestion ./ingestion
 COPY schemas ./schemas
 COPY processing ./processing
+# Only the backfill, which the backfill DAG runs here. The Spark jobs in batch/ live in the Spark image.
+COPY batch/__init__.py ./batch/__init__.py
+COPY batch/backfill.py ./batch/backfill.py
 COPY configs/sources.yaml ./configs/sources.yaml
 
 # Inside the Compose network Kafka is reached by its service name, never by 127.0.0.1, which here

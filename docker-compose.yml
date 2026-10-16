@@ -313,7 +313,9 @@ services:
   airflow-migrate:
     <<: *airflow-common
     container_name: quakeflow-airflow-migrate
-    command: ["db", "migrate"]
+    # Also creates the pool that lets only one Spark container run at a time. The machine has room for one,
+    # and it keeps two Gold builds from running together (D-028).
+    command: ["bash", "-c", "airflow db migrate && airflow pools set quakeflow_spark 1 'Spark containers, one at a time'"]
     restart: "no"
     mem_limit: 768m
 
