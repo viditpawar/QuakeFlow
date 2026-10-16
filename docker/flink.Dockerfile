@@ -13,3 +13,8 @@ RUN mkdir -p /opt/flink/checkpoints && chown flink:flink /opt/flink/checkpoints
 
 # Metrics: Flink 2.x already ships its Prometheus reporter in plugins/, so it only needs to be
 # switched on (see docker-compose.yml).
+
+# The job's SQL and the script that submits it again, so a container started by Airflow can recover the job
+# without any host path. The compose service still mounts ./flink/sql over the copy.
+COPY --chown=flink:flink flink/sql /opt/flink/sql
+COPY --chown=flink:flink --chmod=755 flink/resubmit.sh /opt/flink/resubmit.sh

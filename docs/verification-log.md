@@ -255,3 +255,20 @@ The container reported healthy, using 34 MiB of its 384 MiB limit, as user 10001
 - The same range was not run a second time, so the skip of a complete window was not seen in Airflow (it is unit-tested in `batch/backfill.py`).
 - A failed download, a rejected parameter set and a failed verification were not run live.
 - The negative control for the verification (deleting a revision from Silver and seeing the DAG fail) was not run.
+
+## 2026-10-16: Flink health DAG
+
+**What was run.** `flink_health` against the real, running job: first a healthy check, then the job was cancelled through the REST API, as by accident, and the DAG run again.
+
+| Check | Result |
+|---|---|
+| Healthy job | The run succeeded, took the branch with nothing to do, and stored the job ID. |
+| Cancelled job | The run found the job CANCELED, resubmitted it, and confirmed it healthy. A new job was RUNNING and the old one CANCELED. |
+| State kept | The new job restored from checkpoint 1540 of the old job (`restored.external_path` in the checkpoint API), then completed new checkpoints. |
+| First attempt | Failed: Airflow read the command argument `/opt/flink/resubmit.sh` as a template file name and never ran it. The job stayed cancelled for several minutes until the corrected DAG was run. The command now goes through `sh -c`. |
+| Unit tests | Every state of the decision, an unreachable or malformed JobManager reply, and the script in a real shell: newest complete checkpoint of the named job chosen (a newer one of another job and an incomplete one ignored), no second copy, refusal without a checkpoint, and only valid job IDs accepted. They found a sort that depended on how many hyphens the path had. |
+
+**What this does not show.**
+- Nothing here shows that no revision was emitted twice. The restore from the checkpoint is shown, the exactly-once counts were not repeated for this path, and the earlier recovery test measured that for a manual resubmit.
+- The stalled job, the unreachable JobManager and the refusal without a checkpoint were not run live.
+- The time the job was down during the first attempt was not measured.

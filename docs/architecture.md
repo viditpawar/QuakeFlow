@@ -90,7 +90,7 @@ Measured on a 16 GB Windows laptop with Docker Desktop, with the whole stack run
 
 ## What is not built
 
-- **Restarting Flink.** Airflow starts the Spark load and the Gold build every 30 minutes (D-027) and checks that the Flink job is running, but nothing restarts the Flink job after a reboot.
+- **Restarting Flink containers.** Airflow starts the Spark load and the Gold build (D-027) and submits the Flink job again if it was cancelled or lost (D-031). The containers themselves are restarted by Docker's restart policy, and a JobManager that is down for good fails the `flink_health` run and waits for a person.
 - **Complete history of revisions.** The reconciliation DAG (D-029) finds revisions made after an event left the one-day feed, but the catalog returns only an event's current revision, so a revision that is replaced between two runs is never observed.
 - **High availability and backups.** One broker, one worker, one JobManager, and no backups.
 - **Alert delivery.** Prometheus evaluates the alert rules, but nothing is sent anywhere (D-021).

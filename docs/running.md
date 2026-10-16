@@ -143,6 +143,7 @@ Start it with `python scripts/airflow_setup.py` once, then `docker compose --pro
 |---|---|---|
 | `incremental_pipeline` | every 30 minutes | Preflight, Spark ingestion, quality gate and Gold. |
 | `reconciliation` | every 6 hours | Asks USGS for everything updated since the watermark (minus 48 hours) and hands it to the collector through the outbox (D-029). |
+| `flink_health` | every 5 minutes | Checks that the Flink job is RUNNING and checkpointing. If it was cancelled or ended, submits it again from its last checkpoint (D-031). |
 | `historical_backfill` | by hand | Downloads a date range, loads it, verifies it is in Silver, builds Gold (D-030). |
 
 ```powershell

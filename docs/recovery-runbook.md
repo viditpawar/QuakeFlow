@@ -8,7 +8,7 @@ How to recover the streaming part of QuakeFlow, and what was measured. Timings a
 | Failure | What happens | Data loss or duplicates |
 |---|---|---|
 | TaskManager container dies | The job restarts by itself from the latest checkpoint once a TaskManager is back. | None (tested) |
-| Job cancelled or JobManager lost | Resubmit the job from the retained checkpoint (below). | None (tested) |
+| Job cancelled or JobManager lost | With Airflow running, the `flink_health` DAG submits it again from the retained checkpoint within 5 minutes (D-031). By hand, see below. | None (tested) |
 | Kafka stopped | The collector keeps unconfirmed revisions pending and sends them when Kafka returns. The Flink job keeps retrying, with a delay that grows to one minute, and resumes by itself. | None (both tested) |
 | Spark load killed part way | Run the load again. Each table is a separate Iceberg commit, so tables can disagree with each other until the retry finishes (see below). | None (tested) |
 | Kafka topics lost or recreated | The lakehouse keeps everything already loaded. The saved read positions of Spark and Flink now point past the end of the empty topics, so they must be reset (below). Revisions published but not yet loaded are gone from Kafka. | Possible, for revisions not yet loaded |
