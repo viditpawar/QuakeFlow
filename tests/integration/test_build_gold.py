@@ -15,12 +15,13 @@ from tests.spark_support import lakehouse_is_up, spark_sql
 pytestmark = pytest.mark.integration
 
 SCRIPTS = "".join((ROOT / "iceberg" / "sql" / name).read_text() for name in ("002_create_tables.sql", "004_gold_models.sql"))
-SILVER_TABLES = ["earthquake_versions", "earthquakes_current", "rejected_records"]
+SILVER_TABLES = ["earthquake_versions", "earthquakes_current", "rejected_records", "load_log"]
 BRONZE_TABLES = ["live_observations", "historical_observations"]
-GOLD_TABLES = [
+GOLD_VIEWS = [
     "daily_seismic_activity", "regional_activity", "magnitude_distribution",
-    "revision_statistics", "ingestion_latency", "build_log",
+    "revision_statistics", "ingestion_latency",
 ]
+GOLD_TABLES = [f"{v}_builds" for v in GOLD_VIEWS] + ["build_log", "build_manifest", "published_build"]
 HASH = "a" * 63
 
 
@@ -63,6 +64,8 @@ def lake():
     yield ns
     drops = [f"DROP TABLE IF EXISTS {ns['bronze']}.{t} PURGE;" for t in BRONZE_TABLES]
     drops += [f"DROP TABLE IF EXISTS {ns['silver']}.{t} PURGE;" for t in SILVER_TABLES]
+    drops += [f"DROP VIEW IF EXISTS {ns['gold']}.{v};" for v in GOLD_VIEWS]
+    drops += [f"DROP TABLE IF EXISTS {ns['gold']}.{v} PURGE;" for v in GOLD_VIEWS]  # a legacy plain table
     drops += [f"DROP TABLE IF EXISTS {ns['gold']}.{t} PURGE;" for t in GOLD_TABLES]
     spark_sql(" ".join(drops) + " " + " ".join(f"DROP NAMESPACE IF EXISTS {v};" for v in ns.values()))
 
@@ -97,11 +100,13 @@ def seed_good_data(ns):
     )
 
 
-def build_gold(ns) -> subprocess.CompletedProcess:
+def build_gold(ns, *source) -> subprocess.CompletedProcess:
+    """Run a build. Without an explicit input it records the current Silver state and builds from it."""
     return subprocess.run(
         ["docker", "compose", "--profile", "batch", "run", "--rm", "-T", "spark",
          "/opt/spark/bin/spark-submit", "/workspace/batch/build_gold.py",
-         "--bronze-ns", ns["bronze"], "--silver-ns", ns["silver"], "--gold-ns", ns["gold"]],
+         "--bronze-ns", ns["bronze"], "--silver-ns", ns["silver"], "--gold-ns", ns["gold"],
+         *(source or ("--pin-now",))],
         cwd=ROOT, capture_output=True, text=True, timeout=900, check=False,
     )
 
@@ -212,3 +217,99 @@ def test_the_quality_gate_blocks_bad_data_and_leaves_gold_untouched(lake):
     assert last_log(lake)[0] == "promoted"
     log = spark_sql(f"SELECT status FROM {lake['gold']}.build_log ORDER BY built_at;")
     assert [row[0] for row in log] == ["promoted", "blocked", "blocked", "promoted"]
+
+
+def published(ns) -> str:
+    return spark_sql(f"SELECT build_id FROM {ns['gold']}.published_build;")[0][0]
+
+
+def manifest_ids(ns) -> list[str]:
+    return [row[0] for row in spark_sql(f"SELECT build_id FROM {ns['gold']}.build_manifest ORDER BY completed_at;")]
+
+
+def pinned_load_ids(ns) -> list[str]:
+    return [row[0] for row in spark_sql(f"SELECT run_id FROM {ns['silver']}.load_log ORDER BY finished_at;")]
+
+
+def daily_dates(ns) -> set[str]:
+    return {row[0] for row in table(ns, "daily_seismic_activity", "event_date")}
+
+
+def test_a_build_reads_the_snapshots_its_load_recorded_and_can_be_rolled_back(lake):
+    seed_good_data(lake)
+    s = lake["silver"]
+    assert build_gold(lake).returncode == 0
+    first_build, first_load = published(lake), pinned_load_ids(lake)[0]
+    assert "2025-03-05" not in daily_dates(lake)
+
+    # A new event arrives in Silver after that load finished.
+    spark_sql(
+        current_row(s, "e7", "2025-03-05 00:00:00", "2025-03-05 00:05:00", 3.3, "New, Texas")
+        + version_row(s, "e7", "2025-03-05 00:00:00", "2025-03-05 00:05:00", 3.3, "New, Texas")
+    )
+
+    # Building from the earlier load must not see it, although Silver now holds it.
+    result = build_gold(lake, "--load-run-id", first_load)
+    assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+    assert "2025-03-05" not in daily_dates(lake), "Gold must be built from the recorded snapshots, not from Silver now"
+    second_build = published(lake)
+    assert second_build != first_build
+
+    # A build from the current state does see it, and every build stays in the manifest.
+    assert build_gold(lake).returncode == 0
+    assert "2025-03-05" in daily_dates(lake)
+    third_build = published(lake)
+    assert manifest_ids(lake) == [first_build, second_build, third_build]
+    counts = spark_sql(
+        f"SELECT build_id, count(*) FROM {lake['gold']}.daily_seismic_activity_builds GROUP BY build_id ORDER BY build_id;"
+    )
+    assert {row[0] for row in counts} == {first_build, second_build, third_build}
+
+    # Roll back to the first build: readers see its data in every table, and the log says so.
+    rollback = build_gold(lake, "--publish-existing", first_build)
+    assert rollback.returncode == 0, (rollback.stdout + rollback.stderr)[-3000:]
+    assert published(lake) == first_build
+    assert "2025-03-05" not in daily_dates(lake)
+    assert spark_sql(f"SELECT status FROM {lake['gold']}.build_log ORDER BY built_at DESC LIMIT 1;")[0][0] == "republished"
+
+    # A build that is not in the manifest cannot be published.
+    missing = build_gold(lake, "--publish-existing", "00000000-0000-0000-0000-000000000000")
+    assert missing.returncode == 1 and published(lake) == first_build
+
+
+def test_a_build_without_recorded_snapshots_is_blocked_and_changes_nothing(lake):
+    seed_good_data(lake)
+    assert build_gold(lake).returncode == 0
+    before, good = published(lake), gold_snapshot(lake)
+
+    blocked = build_gold(lake, "--load-run-id", "no-such-load")
+    assert blocked.returncode == 1
+    assert "silver_snapshots_recorded" in blocked.stdout + blocked.stderr
+    assert published(lake) == before and gold_snapshot(lake) == good
+    status, failed, names = last_log(lake)
+    assert (status, names) == ("blocked", "silver_snapshots_recorded")
+
+
+def test_the_first_versioned_build_replaces_a_plain_table_of_the_same_name(lake):
+    seed_good_data(lake)
+    g = lake["gold"]
+    spark_sql(
+        f"CREATE TABLE {g}.daily_seismic_activity (event_date DATE) USING iceberg;"
+        f"INSERT INTO {g}.daily_seismic_activity VALUES (DATE'1999-01-01');"
+    )
+    assert build_gold(lake).returncode == 0
+    assert "1999-01-01" not in daily_dates(lake), "the old table's rows must be gone, not mixed in"
+    assert daily_dates(lake) == {"2025-01-01", "2025-01-02", "2025-02-01"}
+
+
+def test_old_builds_are_removed_but_the_published_one_is_kept(lake):
+    seed_good_data(lake)
+    for _ in range(3):
+        assert build_gold(lake).returncode == 0
+    ids = manifest_ids(lake)
+    result = build_gold(lake, "--keep-builds", "1")
+    assert result.returncode == 0
+    kept = manifest_ids(lake)
+    assert kept == [published(lake)] and len(kept) == 1 and kept[0] not in ids
+    remaining = {row[0] for row in spark_sql(f"SELECT DISTINCT build_id FROM {lake['gold']}.regional_activity_builds;")}
+    assert remaining == set(kept)

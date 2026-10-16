@@ -140,3 +140,21 @@ TBLPROPERTIES (
     'write.metadata.delete-after-commit.enabled' = 'true',
     'write.metadata.previous-versions-max' = '20'
 );
+
+-- One row per finished load: the Silver snapshots the load ended with. Gold reads these snapshots
+-- (see batch/load_log.py), so a load that starts or is still running cannot change a Gold build.
+CREATE TABLE IF NOT EXISTS local.silver.load_log (
+    run_id                STRING    COMMENT 'The orchestrator run ID, or a generated one for a manual run',
+    job                   STRING    COMMENT 'ingest_live or ingest_history',
+    finished_at           TIMESTAMP COMMENT 'When the load finished',
+    current_snapshot_id   BIGINT    COMMENT 'Iceberg snapshot of earthquakes_current when the load finished',
+    versions_snapshot_id  BIGINT    COMMENT 'Iceberg snapshot of earthquake_versions when the load finished'
+)
+USING iceberg
+COMMENT 'Silver snapshots at the end of each load, for reproducible Gold builds'
+TBLPROPERTIES (
+    'format-version' = '2',
+    'write.parquet.compression-codec' = 'zstd',
+    'write.metadata.delete-after-commit.enabled' = 'true',
+    'write.metadata.previous-versions-max' = '20'
+);

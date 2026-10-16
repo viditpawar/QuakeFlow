@@ -128,7 +128,7 @@ def test_gold_build_refuses_anything_but_views_and_overwrites():
 
 
 def test_every_gold_table_is_created_before_the_build_writes_to_it():
-    from batch.build_gold import publish_targets, split_build_statements
+    from batch.build_gold import builds_table, publish_targets, split_build_statements
 
     created = {
         s.split()[5]
@@ -136,8 +136,25 @@ def test_every_gold_table_is_created_before_the_build_writes_to_it():
         if s.startswith("CREATE TABLE")
     }
     _, publish = split_build_statements(load_statements(SQL_DIR / "005_build_gold.sql"))
-    assert {t for t, _ in publish_targets(publish)} <= created
-    assert "local.gold.build_log" in created
+    # The public names are views, so the rows live in the <name>_builds tables.
+    assert {builds_table(t) for t, _ in publish_targets(publish)} <= created
+    assert not {t for t, _ in publish_targets(publish)} & created
+    assert {"local.gold.build_log", "local.gold.build_manifest", "local.gold.published_build"} <= created
+
+
+def test_every_builds_table_starts_with_the_build_id_column():
+    import re
+
+    text = (SQL_DIR / "004_gold_models.sql").read_text(encoding="utf-8")
+    for match in re.finditer(r"CREATE TABLE IF NOT EXISTS (\S+_builds) \(\s*(\w+)", text):
+        assert match.group(2) == "build_id", match.group(1)
+    assert text.count("_builds (") == 5
+
+
+def test_the_load_log_is_defined_with_the_silver_tables():
+    statements = load_statements(SQL_DIR / "002_create_tables.sql")
+    log = [s for s in statements if "local.silver.load_log" in s]
+    assert len(log) == 1 and "current_snapshot_id" in log[0] and "versions_snapshot_id" in log[0]
 
 
 def test_historical_bronze_and_rejected_merges_are_null_safe_on_event_id():

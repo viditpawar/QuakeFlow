@@ -82,10 +82,15 @@ The first command writes a raw download, normalized files and a manifest for eac
 
 ## 7. Build the Gold analytics
 
-The job audits Silver against `configs/quality.yaml` first and publishes only if every check passes. If any check fails, Gold is left untouched, the exit code is 1, and the attempt is recorded in `gold.build_log`.
+The job reads the Silver snapshots that a finished load recorded (`silver.load_log`), audits them against `configs/quality.yaml`, and publishes only if every check passes. If any check fails, what readers see is left untouched, the exit code is 1, and the attempt is recorded in `gold.build_log`. Airflow passes its run ID so Gold follows the ingestion of the same run. By hand, `--pin-now` records the current Silver state and builds from it, `--load-run-id` builds from a named load, and with neither the newest recorded load is used.
+
+Each build is kept under its `build_id` in the `*_builds` tables and listed in `gold.build_manifest`. The tables you query (`gold.daily_seismic_activity` and the others) are views of the published build, so a reader sees one build in full. The newest 10 builds are kept.
 
 ```powershell
-docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/build_gold.py
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/build_gold.py --pin-now
+# go back to an earlier build that is still in the manifest
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELECT build_id, completed_at, load_run_id FROM local.gold.build_manifest ORDER BY completed_at DESC"
+docker compose --profile batch run --rm spark /opt/spark/bin/spark-submit /workspace/batch/build_gold.py --publish-existing <build_id>
 docker compose --profile batch run --rm spark /opt/spark/bin/spark-sql -e "SELECT status, checks_failed, failed_checks FROM local.gold.build_log ORDER BY built_at DESC LIMIT 5"
 ```
 

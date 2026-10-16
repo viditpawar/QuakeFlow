@@ -13,9 +13,11 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 from batch.job_metrics import job_run
+from batch.load_log import record_load
 from batch.sql_files import DEFAULT_BRONZE, DEFAULT_SILVER, load_statements
 
 SQL_DIR = Path(os.getenv("QUAKEFLOW_SQL_DIR", "/workspace/iceberg/sql"))
@@ -53,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-dir", type=Path, default=Path(DEFAULT_INPUT_DIR))
     parser.add_argument("--bronze-ns", default=DEFAULT_BRONZE)
     parser.add_argument("--silver-ns", default=DEFAULT_SILVER)
+    parser.add_argument("--run-id", default=None, help="the orchestrator run, recorded with the Silver snapshots")
     args = parser.parse_args(argv)
 
     windows = completed_windows(args.input_dir)
@@ -82,6 +85,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{spark.table('incoming_hist_versions').count()} distinct revisions, "
             f"{spark.table('incoming_hist_rejected').count()} rejected"
         )
+        run_id = args.run_id or f"manual-{uuid.uuid4()}"
+        current, versions = record_load(spark, args.silver_ns, "ingest_history", run_id)
+        log(f"recorded load {run_id}: Silver snapshots {current} and {versions}")
     spark.stop()
     return 0
 

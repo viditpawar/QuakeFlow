@@ -22,7 +22,7 @@ Every stage uses this same rule. That is what makes it safe for data to arrive t
 | Kafka `events.validated`, `events.dlq` | Clean revisions, and rejected messages with their reason and original coordinates. | Readers must use `read_committed`. |
 | Spark load | Reads new messages with Structured Streaming (`availableNow`), then merges into Bronze, Silver versions, Silver current and rejected records (D-018). | Every write is a merge on the table's identity, so a replay or a lost checkpoint changes nothing. |
 | Backfill | Downloads historical windows, splitting any over the catalog's 20,000-event limit. Normalizes with the same code as the live path. Spark merges the completed windows (D-019). | A window counts as done only when its manifest exists and its download still matches its checksum. Overlapping or repeated loads change nothing. |
-| Gold build | Stages five analytics tables as views, audits them, and replaces the tables only if every check passes (D-020). | A failed check publishes nothing and leaves the previous tables in place. |
+| Gold build | Reads the Silver snapshots a finished load recorded, stages five analytics tables as views, audits them, appends them as a new build, and switches the published build in one commit only if every check passes (D-020, D-028). | A failed check publishes nothing. A reader sees one build in full, and an earlier build can be published again. |
 
 ## What is guaranteed, end to end
 
@@ -90,7 +90,7 @@ Measured on a 16 GB Windows laptop with Docker Desktop, with the whole stack run
 
 ## What is not built
 
-- **Scheduling.** Nothing starts the Spark load or the Gold build on a timer, and nothing restarts the Flink job after a reboot.
+- **Restarting Flink.** Airflow starts the Spark load and the Gold build every 30 minutes (D-027) and checks that the Flink job is running, but nothing restarts the Flink job after a reboot.
 - **Reconciliation of late revisions.** Revisions USGS makes after an event leaves the one-day feed are not caught (D-003).
 - **High availability and backups.** One broker, one worker, one JobManager, and no backups.
 - **Alert delivery.** Prometheus evaluates the alert rules, but nothing is sent anywhere (D-021).

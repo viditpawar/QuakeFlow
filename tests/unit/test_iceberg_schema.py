@@ -28,6 +28,7 @@ def test_all_expected_tables_are_defined():
         "local.silver.earthquake_versions",
         "local.silver.earthquakes_current",
         "local.silver.rejected_records",
+        "local.silver.load_log",
     }
 
 

@@ -33,6 +33,7 @@ target-version = "py311"
 "batch/build_gold.py" = ["UP017"]
 "batch/ingest_live.py" = ["UP017"]
 "batch/ingest_history.py" = ["UP017"]
+"batch/load_log.py" = ["UP017"]
 "batch/quality.py" = ["UP017"]
 "batch/sql_files.py" = ["UP017"]
 

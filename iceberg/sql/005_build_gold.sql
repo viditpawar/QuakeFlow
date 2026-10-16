@@ -1,9 +1,12 @@
 -- Built by batch/build_gold.py in two phases.
 -- Phase 1 runs every CREATE OR REPLACE TEMP VIEW below. These stage the results without touching
---   the Gold tables, so the quality gate can audit them first.
--- Phase 2 runs the INSERT OVERWRITE statements, only if every check passed. Each one replaces a
---   whole Gold table in a single Iceberg commit, and the staged views have the same columns, in
---   the same order, as the tables.
+--   the Gold tables, so the quality gate can audit them first. They read the Silver snapshots that
+--   the load recorded, not whatever Silver holds when the build starts.
+-- Phase 2 publishes, only if every check passed. Each INSERT OVERWRITE below names a Gold table and the
+--   staged view that fills it, and the staged views have the same columns, in the same order, as the
+--   table. The build does not run these statements as written. It appends the staged rows to the
+--   table's <name>_builds table under a new build_id, and then makes that build the published one
+--   in a single commit, so the INSERT OVERWRITE form is only the declaration of what fills what.
 -- Statements are split on semicolons, so avoid semicolons inside comments and strings.
 
 CREATE OR REPLACE TEMP VIEW staged_daily_seismic_activity AS

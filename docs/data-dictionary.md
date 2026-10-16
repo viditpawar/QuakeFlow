@@ -77,7 +77,7 @@ The catalog returns the current state of each event, not its past revisions, so 
 
 # Gold: analytics
 
-Built by `batch/build_gold.py` from Silver, behind the quality gate in `configs/quality.yaml`. Each table is replaced as a whole on every successful build, and a failed build leaves all of them as they were.
+Built by `batch/build_gold.py` from Silver, behind the quality gate in `configs/quality.yaml`. Each successful build is stored under its own `build_id` in `<name>_builds` tables, and the names below are views that show the one published build. Publishing is a single commit, so all five tables always come from the same build, and a failed build leaves what readers see as it was. The build reads the Silver snapshots recorded in `silver.load_log` by a finished load, not whatever Silver holds when it starts.
 
 **Conventions.** Days and months are UTC. Earthquake analytics count only `event_type = 'earthquake'`, so quarry blasts and other types do not inflate the numbers (D-004). Counts describe what USGS had published and this platform had loaded when the table was built. They are not a complete catalog of every earthquake, and the lakehouse currently holds a magnitude 2.5 and above week from January 2025 beside all-magnitude recent days, so compare periods only if they were loaded the same way.
 
@@ -88,7 +88,10 @@ Built by `batch/build_gold.py` from Silver, behind the quality gate in `configs/
 | `gold.magnitude_distribution` | whole-magnitude band | How earthquake counts vary by magnitude. Bands are `<0`, `0-1` up to `6-7`, `7+`, and `unknown` for events with no magnitude. `share` is the fraction of all earthquakes. |
 | `gold.revision_statistics` | UTC day of the latest revision's `event_time` | How many events were revised, how long between revisions, and what changed (magnitude, depth, location, review status), plus the largest magnitude change and same-timestamp conflicts. It only sees revisions this platform observed, so changes between two polls are invisible. |
 | `gold.ingestion_latency` | UTC day of `loaded_at` | How long a live revision waited between its USGS update and being written to Silver (average, median, 95th percentile, maximum, in minutes). The wait includes how often the load job is run, so it measures the whole path and not Kafka or Flink alone. Historical backfills are excluded. |
-| `gold.build_log` | build attempt | Whether each attempt was `promoted`, `blocked` by a failed check, or `publish_failed`, which checks failed, and which Iceberg snapshots of Silver were read. |
+| `gold.build_log` | build attempt | Whether each attempt was `promoted`, `blocked` by a failed check, `publish_failed`, or `republished` (an earlier build was published again), which checks failed, which load it followed, and which Iceberg snapshots of Silver were read. |
+| `gold.build_manifest` | complete build | The builds that were written in full and passed the gate: when, which load and Silver snapshots, and the row count of each table. Only these can be published again. |
+| `gold.published_build` | one row | The build the views currently show. |
+| `silver.load_log` | finished load | The Silver snapshots (`earthquakes_current` and `earthquake_versions`) at the end of each ingestion, under the orchestrator's run ID. |
 
 ## Quality contract
 

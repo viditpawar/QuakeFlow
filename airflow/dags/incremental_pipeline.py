@@ -27,11 +27,11 @@ SPARK_SUBMIT = "/opt/spark/bin/spark-submit"
 DEFAULT_ARGS = {"retries": 2, "retry_delay": timedelta(minutes=2), "retry_exponential_backoff": True}
 
 
-def spark_task(task_id: str, script: str, **kwargs) -> DockerOperator:
+def spark_task(task_id: str, script: str, *arguments: str, **kwargs) -> DockerOperator:
     return DockerOperator(
         task_id=task_id,
         image=SPARK_IMAGE,
-        command=[SPARK_SUBMIT, f"/workspace/batch/{script}"],
+        command=[SPARK_SUBMIT, f"/workspace/batch/{script}", *arguments],
         docker_url="unix://var/run/docker.sock",
         network_mode=NETWORK,
         mounts=[Mount(source=CHECKPOINT_VOLUME, target="/checkpoints", type="volume")],
@@ -69,8 +69,14 @@ def incremental_pipeline():
     def preflight() -> None:
         run_preflight()
 
-    ingest = spark_task("ingest_live", "ingest_live.py", execution_timeout=timedelta(minutes=20))
-    gold = spark_task("build_gold", "build_gold.py", execution_timeout=timedelta(minutes=20))
+    # Ingestion records the Silver snapshots it finished with under this run ID, and Gold reads those snapshots,
+    # so the two stay tied together even if a load starts while Gold is building.
+    ingest = spark_task(
+        "ingest_live", "ingest_live.py", "--run-id", "{{ run_id }}", execution_timeout=timedelta(minutes=20)
+    )
+    gold = spark_task(
+        "build_gold", "build_gold.py", "--load-run-id", "{{ run_id }}", execution_timeout=timedelta(minutes=20)
+    )
 
     preflight() >> ingest >> gold
 

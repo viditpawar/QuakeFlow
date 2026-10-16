@@ -13,12 +13,14 @@ twice, or losing the checkpoint and starting over, leaves the tables unchanged.
 import argparse
 import os
 import sys
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
 
 from batch.job_metrics import job_run
+from batch.load_log import record_load
 from batch.sql_files import DEFAULT_BRONZE, DEFAULT_SILVER, load_statements
 
 SQL_DIR = Path(os.getenv("QUAKEFLOW_SQL_DIR", "/workspace/iceberg/sql"))
@@ -114,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint-dir", default="/checkpoints/live")
     parser.add_argument("--bronze-ns", default=DEFAULT_BRONZE)
     parser.add_argument("--silver-ns", default=DEFAULT_SILVER)
+    parser.add_argument("--run-id", default=None, help="the orchestrator run, recorded with the Silver snapshots")
     args = parser.parse_args(argv)
 
     live = load_statements(SQL_DIR / "003_merge_current.sql", args.bronze_ns, args.silver_ns)
@@ -124,6 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     with job_run("ingest_live"):
         consume(spark, args.bootstrap, args.topic, live_batch_handler(live), f"{args.checkpoint_dir}/validated")
         consume(spark, args.bootstrap, args.dlq_topic, dlq_batch_handler(rejected), f"{args.checkpoint_dir}/dlq")
+        # Only reached if both reads finished. Gold builds from the snapshots recorded here.
+        run_id = args.run_id or f"manual-{uuid.uuid4()}"
+        current, versions = record_load(spark, args.silver_ns, "ingest_live", run_id)
+        log(f"recorded load {run_id}: Silver snapshots {current} and {versions}")
     log("done")
     spark.stop()
     return 0
