@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS local.bronze.live_observations (
     kafka_topic       STRING    COMMENT 'Source topic',
     kafka_partition   INT       COMMENT 'Source partition',
     kafka_offset      BIGINT    COMMENT 'Offset within the partition',
-    kafka_timestamp   TIMESTAMP COMMENT 'Kafka record timestamp, set to the source update time',
+    kafka_timestamp   TIMESTAMP COMMENT 'Kafka record timestamp: when the broker received the record (the source update time in rows loaded before D-032)',
     event_id          STRING    COMMENT 'Kafka key, the USGS event id',
     record_hash       STRING    COMMENT 'SHA-256 fingerprint of the source content',
     source_updated_at TIMESTAMP COMMENT 'USGS last-updated time, from the payload',

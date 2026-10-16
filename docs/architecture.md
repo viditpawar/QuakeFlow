@@ -17,12 +17,15 @@ Every stage uses this same rule. That is what makes it safe for data to arrive t
 | Step | What happens | Guarantee |
 |---|---|---|
 | Collector | Polls the hour feed every 60 s and the day feed every 15 min. Validates each record with Pydantic (strict types, UTC timestamps, coordinate ranges). Computes the hash. Records each unseen revision in SQLite as pending. | A revision is marked sent only when Kafka confirms it (D-008, D-012). An outage leaves it pending to be retried, never lost. Delivery is at-least-once. |
-| Kafka `events.raw` | 3 partitions keyed by event id, so all revisions of one event stay in order. 7 days of retention (D-001). | Durable, replayable input for Flink. |
+| Kafka `events.raw` | 3 partitions keyed by event id, so all revisions of one event stay in order. 7 days of retention, counted from when a record arrived and not from its USGS update time (D-001, D-032). | Durable, replayable input for Flink. |
 | Flink job | Reads the raw text, parses and validates it in SQL, drops repeats of the same `(event_id, record_hash)`, and writes with transactions. 10 second checkpoints (D-014). | Transactional (exactly-once) writes to Kafka. Invalid messages go to the dead-letter topic with the reason, and a late older revision is still kept. Its repeat filter forgets after 7 days (see below). |
 | Kafka `events.validated`, `events.dlq` | Clean revisions, and rejected messages with their reason and original coordinates. | Readers must use `read_committed`. |
 | Spark load | Reads new messages with Structured Streaming (`availableNow`), then merges into Bronze, Silver versions, Silver current and rejected records (D-018). | Every write is a merge on the table's identity, so a replay or a lost checkpoint changes nothing. |
 | Backfill | Downloads historical windows, splitting any over the catalog's 20,000-event limit. Normalizes with the same code as the live path. Spark merges the completed windows (D-019). | A window counts as done only when its manifest exists and its download still matches its checksum. Overlapping or repeated loads change nothing. |
 | Gold build | Reads the Silver snapshots a finished load recorded, stages five analytics tables as views, audits them, appends them as a new build, and switches the published build in one commit only if every check passes (D-020, D-028). | A failed check publishes nothing. A reader sees one build in full, and an earlier build can be published again. |
+| Reconciliation | Every 6 hours an Airflow DAG asks the catalog for everything updated since its watermark, minus a 48 hour overlap, and writes it as one checksummed batch to an outbox volume. The collector validates it, records the new revisions as pending in one transaction, and only then answers. The DAG moves the watermark when it has read that answer (D-029). | Accepted does not mean delivered: Kafka confirmation is a separate, later state. A batch that is replayed, or whose answer was lost in a crash, records nothing twice. |
+| Orchestration | Airflow runs the load and the Gold build every 30 minutes, the reconciliation every 6 hours and the backfill by hand, with retries, timeouts and one Spark container at a time (D-027, D-030). | A failed task is retried, then the run fails and stays in the history. Gold runs only after its ingestion succeeded. |
+| Flink health | Every 5 minutes an Airflow DAG checks that the job is RUNNING and checkpointing, and submits it again from the checkpoint of the job it last saw healthy if it was cancelled or lost (D-031). | It leaves a job that is retrying alone, and refuses to start from the beginning of the topic without a checkpoint. |
 
 ## What is guaranteed, end to end
 
@@ -48,6 +51,12 @@ No single component makes the whole pipeline exactly-once. Each hop has its own 
 | Table metadata | PostgreSQL (volume `postgres-data`) | The tables cannot be found even though their files exist. |
 | Table data and metadata files | RustFS (volume `rustfs-data`) | The lakehouse is lost. Rebuild it from Kafka and the backfill. |
 | Downloaded historical windows | `data/history/` | Download them again. |
+| Reconciliation batches and their answers | Volume `reconcile-outbox`, shared by the collector and the Airflow containers | A batch not yet accepted is downloaded again by the next run, because the watermark has not moved. |
+| Reconciliation watermark | An Airflow Variable in the Airflow database | The next run starts from the initial look-back, 48 hours, and the change detector discards what it already has. |
+| Downloaded backfill files | Volume `quakeflow_history-files`, created by Docker on first use | Run the backfill for that range again. |
+| Airflow run history, variables and pools | Database `airflow` in PostgreSQL, task logs on the volume `airflow-logs` | The schedule and history are lost. The data is not. Rebuild with `scripts/airflow_setup.py`. |
+| Airflow secrets | `secrets/` in the repository folder, ignored by git | Run `scripts/airflow_setup.py --rotate`. |
+| Which Silver snapshots each load ended with, and which Gold builds exist | Iceberg tables `silver.load_log`, `gold.build_manifest`, `gold.published_build` | Gold can be rebuilt from Silver with `--pin-now`. |
 
 The Iceberg tables are the system of record for analysis. There is no backup of any of these volumes.
 

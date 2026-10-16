@@ -57,9 +57,27 @@ def test_bad_kafka_topic_definitions_are_reported(fake_root, text, expected):
 
 def test_a_good_kafka_topic_file_has_no_problems(fake_root):
     (fake_root / "configs" / "kafka-topics.yaml").write_text(
-        "topics:\n  - {name: a, partitions: 3, replication_factor: 1, retention_ms: 1000}\n"
+        "topics:\n  - {name: a, partitions: 3, replication_factor: 1, retention_ms: 1000,"
+        " message_timestamp_type: LogAppendTime}\n"
     )
     assert validate.check_kafka_topics() == []
+
+
+@pytest.mark.parametrize("setting", ["", ", message_timestamp_type: CreateTime"])
+def test_a_topic_that_keeps_the_producers_timestamp_is_reported(fake_root, setting):
+    # Retention counts from the record timestamp, which is the USGS update time (D-032).
+    (fake_root / "configs" / "kafka-topics.yaml").write_text(
+        "topics:\n  - {name: a, partitions: 3, replication_factor: 1, retention_ms: 1000" + setting + "}\n"
+    )
+    problems = validate.check_kafka_topics()
+    assert len(problems) == 1 and "must be LogAppendTime" in problems[0]
+
+
+def test_every_real_topic_is_stamped_on_arrival():
+    import yaml
+
+    topics = yaml.safe_load((ROOT / "configs" / "kafka-topics.yaml").read_text(encoding="utf-8"))["topics"]
+    assert {t["message_timestamp_type"] for t in topics} == {"LogAppendTime"} and len(topics) == 3
 
 
 def test_dashboard_problems_are_reported(fake_root):

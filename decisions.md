@@ -1,8 +1,102 @@
 # Decisions Log
 
-A record of the important decisions made on this project: what the situation was, what was chosen, and why.
+The project's memory. **Read sections 1 to 5 below first (about 150 lines).** They hold the context, the index of every decision, what changed, the bugs found and the open gaps, which is enough to continue work without reading the rest. The numbered entries after them are the full reasoning: open one by its number (`D-028`) only when you need it.
 
-**Status values:** `Accepted` (decided and in effect), `Planned` (decided, not built yet), `Retrospective` (made earlier and written down afterwards, so the date is when it was logged).
+Related files: [prd.md](prd.md) (what and why) · [architecture.md](architecture.md) (how it fits) · [design.md](design.md) (conventions and contracts) · [tasks.md](tasks.md) (what is done and what is next) · [.rules.md](.rules.md) (rules for any AI assistant) · [docs/](docs/) (operations and evidence).
+
+## 1. Project context
+
+- **What:** QuakeFlow, a real-time and batch data platform on public USGS earthquake data. Collector, Kafka, Flink, Spark, Iceberg (Bronze, Silver, Gold), Airflow, Prometheus and Grafana, all in Docker Compose on one 16 GB Windows laptop, $0. A single-developer learning and portfolio project, not a production service.
+- **The idea everything hangs on:** USGS revises events after publishing them. A revision is `(event_id, record_hash)`, the hash covers the source content only. Every revision the platform observes is kept, and one current version per event is exposed. A revision that is replaced between two looks is never seen, and the catalog cannot return older revisions.
+- **State on 2026-10-16:** all 8 phases of the original guide are built and tested. The post-review roadmap is built: Airflow scheduling (D-027), versioned Gold with pinned Silver snapshots (D-028), reconciliation through an outbox (D-029), a backfill DAG (D-030), a Flink health DAG (D-031). Tests: 480 unit, 21 integration and recovery. CI: GitHub Actions on every push.
+- **In flight:** the benchmark suite (`benchmarks/`, `docs/benchmarks.md`) is on hold. Its first run exposed the Kafka retention bug (D-032). The fix is applied and tested but not committed. A rerun on the fixed setup was started, and `docs/benchmarks.md` still holds the pre-fix numbers until it is redone. The Airflow DAGs `incremental_pipeline`, `reconciliation` and `flink_health` were paused for the benchmark and must be unpaused afterwards. Exact steps are in [tasks.md](tasks.md).
+- **Where things live:** Airflow UI http://127.0.0.1:8080 (user `quakeflow`, password in `secrets/airflow_passwords.json`, git-ignored). Flink http://127.0.0.1:8081, Grafana http://127.0.0.1:3000, Prometheus :9090, RustFS console :9001. Everything is bound to 127.0.0.1.
+- **How the owner works:** one step at a time, a go-ahead before each step, the owner runs every `git commit` and `git push`, no AI tool's name anywhere in the repo, and nothing claimed that was not verified. The full rules are in [.rules.md](.rules.md).
+
+## 2. Decision index
+
+| ID | Date | Decision |
+|---|---|---|
+| D-001 | 10-13 | Single-node Kafka in KRaft mode, keyed by event_id |
+| D-002 | 10-13 | Docker Compose profiles instead of running everything |
+| D-003 | 10-13 | Poll two USGS feeds with independent intervals (the reconciliation it promised is D-029) |
+| D-004 | 10-13 | Keep all event types in Bronze and Silver, filter to earthquakes in Gold |
+| D-005 | 10-13 | Event versioning: newest `source_updated_at` is current, ties go to the higher hash |
+| D-006 | 10-13 | Build the lakehouse path in two stages |
+| D-007 | 10-13 | Strict normalization with explicit rejection |
+| D-008 | 10-13 | Delivery is confirmed by Kafka, not assumed |
+| D-009 | 10-13 | The record hash covers source content only |
+| D-010 | 10-13 | The change detector keeps every revision and classifies each new one |
+| D-011 | 10-13 | The poller isolates failures per feed and detects but never publishes |
+| D-012 | 10-13 | A revision is marked published only from Kafka's delivery callback |
+| D-013 | 10-13 | Flink 2.2.1 with the matching Kafka connector, SQL-first jobs |
+| D-014 | 10-13 | Flink validates and deduplicates, and never drops a valid revision |
+| D-015 | 10-13 | Recover from retained checkpoints, no JobManager high availability |
+| D-016 | 10-14 | Iceberg on a PostgreSQL JDBC catalog and RustFS, Spark run per job |
+| D-017 | 10-14 | Bronze as received, Silver separates history from current state |
+| D-018 | 10-14 | Spark loads Kafka in availableNow runs, idempotent MERGEs are the safety net |
+| D-019 | 10-14 | Backfill in two stages with the live normalization code and a manifest written last |
+| D-020 | 10-14 | Gold behind a write-audit-publish quality gate (publication changed in D-028) |
+| D-021 | 10-14 | Prometheus and Grafana, scraped where possible and pushed where not |
+| D-022 | 10-14 | Fast checks on every push, heavy tests kept local |
+| D-023 | 10-14 | The Flink job retries without limit, with a growing but capped delay |
+| D-024 | 10-15 | Kafka's data directory is the mounted volume, recreating topics resets read positions |
+| D-025 | 10-15 | The collector is one container, and its state file can resend what Kafka lost |
+| D-026 | 10-15 | Bronze identifies a message by its coordinates and its text |
+| D-027 | 10-15 | Airflow schedules the batch work, its scheduler holds the Docker socket |
+| D-028 | 10-15 | Gold is published as a versioned build from the Silver snapshots a load recorded |
+| D-029 | 10-16 | Reconciliation through a shared outbox, the watermark moves only on the collector's answer |
+| D-030 | 10-16 | Historical backfill as a manual DAG, Spark containers share one slot |
+| D-031 | 10-16 | Airflow resubmits a Flink job that is gone and leaves one that is retrying |
+| D-032 | 10-16 | Kafka topics stamp records with arrival time, so retention counts from arrival |
+
+## 3. Decisions that changed
+
+| Was | Became | Why | See |
+|---|---|---|---|
+| Gold replaced each table in its own commit | Versioned builds, one commit switches what readers see | Readers could see tables from different builds, and a load running during a build changed its input | D-020, D-028 |
+| Batch work started by hand | Airflow DAGs on a schedule. The owner chose Airflow over a lightweight custom orchestrator that was recommended | Scheduling, retries, history | D-027 |
+| Collector as a host process | One hardened container with its state on a named volume | Restarts itself, state not on the Windows file system | D-025 |
+| Flink restarts: fixed delay, 10 attempts | Exponential delay, no limit | A long outage left the job failed for good | D-023 |
+| Bronze identity: topic, partition, offset | Plus the message text | Offsets are reused when topics are recreated, so Bronze skipped 208 messages | D-017, D-026 |
+| Kafka record timestamp = USGS update time | Broker stamps arrival time | Retention counted from the update time and deleted replayed revisions | D-032 |
+| Kafka data in the container | On the `kafka-data` volume | `docker compose down` erased every topic | D-001, D-024 |
+| Late revisions "planned" | Reconciliation DAG with an outbox | Live feeds see only the last day | D-003, D-029 |
+| Numbered ADR files in `docs/decisions/` | This single file | The owner asked for one file with only the important decisions, and now also bugs, changes and context | |
+
+## 4. Bugs found and what fixed them
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| 48 throwaway Kafka topics left behind by tests | A temporary `AdminClient` was destroyed before its requests finished | Keep the client in a variable (`tests/flink_support.delete_topics`), guard test |
+| Flink job FAILED for good after a long Kafka outage | Fixed delay, 10 attempts | D-023, verified by a 6 minute drill |
+| Kafka topics gone after the container was removed | The broker wrote to `/tmp`, not the volume | `KAFKA_LOG_DIRS`, validator check (D-024) |
+| About 2 s stall on each host-side Kafka connect | `localhost` resolved to IPv6 first on Docker Desktop | `127.0.0.1` everywhere host-side, guard test |
+| Bronze skipped 208 messages after topics were recreated, no error | Offsets were reused, identity was only coordinates | Text added to the merge identity (D-026), failing test written first |
+| Documentation said 17 revisions were lost and only a backfill could recover them | Wrong. 23 revisions, and the collector's state held them all | Corrected, `ingestion.resend` (D-025) |
+| Validator rejected `$${HOSTNAME}` in compose | Regex read the escaped shell variable as a compose variable | Regex and test fixed |
+| Collector image failed in a clean container | `prometheus-client` was missing from its requirements | Added, guard test |
+| Airflow API server crash loop | The login file was mounted read-only and the auth manager rewrites it at start | Read-write for the API server only |
+| Spark container from Airflow could not read its catalog template | `COPY --chmod=644` also applied to the folder it created | Explicit `chmod 755` |
+| First live Flink health run did nothing and the job stayed cancelled for minutes | Airflow reads a command argument ending in `.sh` as a template file to load | Run it through `sh -c` |
+| `resubmit.sh` picked `chk-9` over `chk-100` in a test | It sorted on a hyphen-separated field, so the path changed the order | Sort on the checkpoint number alone |
+| Flink health check crashed on a reply that was not a JSON object | Only some errors were caught | Reported as unreachable |
+| A 200,000 revision benchmark run lost data silently | Retention counts from the record timestamp, which was the USGS update time. Earlier runs passed only because they finished before the broker's 5 minute retention check | D-032, integration test with a control topic |
+
+## 5. Open gaps
+
+- **Alerts go nowhere.** Prometheus evaluates 11 rules, nothing is delivered (D-021). Nothing alerts on a failed DAG run, a stalled outbox or watermark, or a failed `flink_health` run.
+- **Silent loss path remains.** The Spark load uses `failOnDataLoss=false`, so a deletion not caused by timestamps (full disk, manual delete) is skipped without failing (D-032).
+- **Airflow is set up for a trusted laptop.** Development login manager, one generated password, the scheduler holds the Docker socket (D-027). A restricted socket proxy is the possible hardening.
+- **Single machine, no backups.** One broker, one Flink slot, one Airflow scheduler. No Iceberg snapshot expiry or compaction job.
+- **Reconciliation limits.** A window over 20,000 updated events fails the run instead of being split. Reconciled revisions travel the live path, so they appear in `gold.ingestion_latency` with a long delay (D-029).
+- **Gold builds must not run at the same time.** Airflow's one-slot Spark pool guarantees it, nothing does when run by hand (D-028).
+- **Evidence gaps.** Each entry of `docs/verification-log.md` ends with what it does not show. The failure paths of the Flink health and backfill DAGs were mostly not run live.
+- **Benchmarks are unfinished.** See section 1 and [tasks.md](tasks.md).
+
+---
+
+**Status values:** `Accepted` (decided and in effect), `Planned` (decided, not built yet), `Retrospective` (made earlier and written down afterwards, so the date is when it was logged). D-003, D-005, D-006 and D-008 were `Planned` when written and are built.
 
 ## Template
 
@@ -14,6 +108,8 @@ A record of the important decisions made on this project: what the situation was
 - **Decision:** What was chosen?
 - **Reasoning:** What made this the right call?
 - **Consequences / trade-offs:** What does this commit us to or rule out?
+
+When a decision changes, add a row to section 3, add the new entry, and say in the old entry which one replaced it. When a bug teaches something, add a row to section 4.
 
 ---
 
@@ -39,7 +135,7 @@ A record of the important decisions made on this project: what the situation was
 
 ### D-003: Poll two USGS feeds with independent intervals
 - **Date:** 2026-10-13
-- **Status:** Planned
+- **Status:** Accepted (was Planned, now built)
 - **Situation:** The one-hour feed is quick but misses events and revisions outside its window.
 - **Options considered:** `all_hour` only; `all_hour` plus `all_day`; `updatedafter` queries against the catalog API.
 - **Decision:** Poll `all_hour` every 60 seconds and `all_day` every 15 minutes, both configurable, with timeouts, exponential backoff and duplicate detection. Add a scheduled longer-lookback or `updatedafter` reconciliation later.
@@ -57,7 +153,7 @@ A record of the important decisions made on this project: what the situation was
 
 ### D-005: Event versioning policy
 - **Date:** 2026-10-13
-- **Status:** Planned
+- **Status:** Accepted (was Planned, now built)
 - **Situation:** A source can revise an event after publication, and treating each revision as a new event double counts it.
 - **Options considered:** Overwrite in place; store only the latest; store every distinct revision plus a current-state table.
 - **Decision:** Identify events by `event_id`. Keep every distinct revision (by content hash) in `silver.earthquake_versions` and one row per event in `silver.earthquakes_current`. The current row changes only when the incoming version has a newer `source_updated_at`. On equal timestamps with different content, the higher `record_hash` wins and the conflict is logged.
@@ -66,7 +162,7 @@ A record of the important decisions made on this project: what the situation was
 
 ### D-006: Build the lakehouse path in two stages
 - **Date:** 2026-10-13
-- **Status:** Planned
+- **Status:** Accepted (was Planned, now built)
 - **Situation:** Flink can write to Iceberg directly, but that needs careful connector version matching and checkpoint-aware commits.
 - **Options considered:** Approach A: Kafka, Flink, curated Kafka topic, Spark micro-batch, Iceberg. Approach B: Flink writes to Iceberg directly.
 - **Decision:** Build Approach A first, and revisit Approach B only if time permits after correctness is proven. No Flink, Spark or Iceberg work starts until ingestion and event-versioning tests pass.
@@ -84,7 +180,7 @@ A record of the important decisions made on this project: what the situation was
 
 ### D-008: Delivery is confirmed by Kafka, not assumed
 - **Date:** 2026-10-13
-- **Status:** Planned
+- **Status:** Accepted (was Planned, now built)
 - **Situation:** The collector remembers the last hash seen per event in SQLite so unchanged records are not re-published. Saving the hash before Kafka confirms delivery would lose data if the process crashed in between.
 - **Options considered:** Record the hash when a change is detected; record it only after Kafka acknowledges the publication.
 - **Decision:** A change counts as delivered only after Kafka confirms it. Detected but unconfirmed changes stay pending and are retried.
@@ -295,3 +391,12 @@ A record of the important decisions made on this project: what the situation was
 - **Decision:** The `flink_health` DAG runs every 5 minutes and never restarts Flink on a schedule. It reads the job list and the checkpoints from the JobManager and decides: RUNNING with a checkpoint in the last 5 minutes is healthy, and the job's ID is remembered in an Airflow Variable; RESTARTING, INITIALIZING and similar states are left to Flink; RUNNING without checkpoints, or a JobManager that cannot be reached, fails the run for a person to look at, because a resubmit would not fix them; a job that is missing, FAILED, CANCELED or FINISHED is submitted again. The resubmit runs `flink/resubmit.sh` in the Flink image, with the checkpoint volume mounted read-only. It resumes from the newest complete checkpoint (one with its `_metadata` file) of the job Airflow last saw healthy, never of another job, because the volume also holds directories of test jobs. It does nothing if a job of that name is already running, and it refuses, with an error, to start from the beginning of the topic when there is no complete checkpoint. The DAG then waits up to 4 minutes for the job to be RUNNING and checkpointing, and fails if it is not.
 - **Reasoning:** The decision logic is plain functions with tests, and the one risky step is a script with guards that are tested in a real shell, including a checkpoint of a different job that must never be chosen. Refusing to guess keeps the exactly-once behaviour that the recovery runbook measured.
 - **Consequences / trade-offs:** The job can be down for up to 5 minutes plus the resubmit time before it is brought back. If Airflow has never seen the job healthy and the JobManager has forgotten it, nothing is resubmitted and the run fails. Topics that were recreated need the manual procedure in the runbook, because the saved checkpoints hold offsets of the old topics. Nothing alerts on a failed `flink_health` run yet. Airflow's Docker access (D-027) now also starts containers that read the checkpoint volume.
+
+### D-032: Kafka topics stamp records with their arrival time, so retention counts from arrival
+- **Date:** 2026-10-16
+- **Status:** Accepted
+- **Situation:** The collector writes the USGS update time as each record's Kafka timestamp, and the Flink job does the same on the validated topic. Kafka decides when to delete old data from the record timestamp, not from when the record arrived. A revision whose update was older than the 7 day retention (a resend after Kafka lost data, a replay, a reconciliation after a long outage) was therefore eligible for deletion as soon as it arrived, and the broker checks every 5 minutes. The Spark load reads with `failOnDataLoss=false`, so a deleted range is skipped with a warning and no failure. The 200,000 revision benchmark found it: the synthetic revisions had 2025 update times, the broker deleted the first half of the validated topic while Spark was reading it, and the log said "records ... will be skipped". The smaller runs passed only because they finished before the broker's first check. For real data the effect needs an update older than 7 days to reach Kafka, which the live feeds never produce, so no loss is known to have happened.
+- **Options considered:** Write the arrival time as the producer's timestamp (loses the update time as a Kafka-level value, and the broker still trusts the producer); fail the Spark load on data loss (`failOnDataLoss=true`, which would turn this into a failed run but needs a reset every time a legitimate retention deletion happens); lengthen the retention (only moves the cliff); set the topics to `LogAppendTime`.
+- **Decision:** `message_timestamp_type: LogAppendTime` on all three topics in `configs/kafka-topics.yaml`, applied by `infrastructure/kafka/create_topics.py` to new topics and, on every run, to existing ones. The configuration validator refuses a topic without it. The test topics are created with the same setting, so tests and benchmarks behave like the real topics. An integration test sends a record with a 30 day old timestamp, expects the broker's arrival time, and shows with a control topic that without the setting the old timestamp is kept.
+- **Reasoning:** "Keep messages for 7 days so consumers can replay" meant 7 days after arrival. The broker setting makes that true whatever timestamp a producer writes, for every producer, with no change to the collector or the Flink job. The payload still carries `source_updated_at`, which is what Flink's watermark and the analytics use, so nothing depended on the Kafka timestamp being the update time.
+- **Consequences / trade-offs:** `kafka_timestamp` in Bronze, and `rejected_at` of Flink-rejected records, now mean when the broker received the record. Rows loaded earlier keep the update time in that column. The setting applies to records written from now on, so a segment that already holds old-timestamped records can still be deleted by the next retention check. The 7 days is also now a real limit on how long a reader can be away: a Flink or Spark checkpoint older than that points into deleted data. `failOnDataLoss=false` is unchanged, so a deletion that is not caused by timestamps (a full disk, a manual delete) is still skipped silently, which remains a gap.

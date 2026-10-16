@@ -272,3 +272,20 @@ The container reported healthy, using 34 MiB of its 384 MiB limit, as user 10001
 - Nothing here shows that no revision was emitted twice. The restore from the checkpoint is shown, the exactly-once counts were not repeated for this path, and the earlier recovery test measured that for a manual resubmit.
 - The stalled job, the unreachable JobManager and the refusal without a checkpoint were not run live.
 - The time the job was down during the first attempt was not measured.
+
+## 2026-10-16: the benchmark found a silent loss, and the fix
+
+**What happened.** The first benchmark ran nine correct runs up to 40,000 revisions, then a single run of 200,000 failed. Spark's log said that offset ranges at the start of two validated partitions "are out of range ... will be skipped", because Kafka had deleted them while Spark was reading. The kept result files are in `benchmarks/results/before-fix/`.
+
+| Check | Result |
+|---|---|
+| Cause | The collector and Flink write the USGS update time as the Kafka record timestamp, and the broker's retention works from the record timestamp. The synthetic revisions had 2025 update times, so every segment was past its 7 days on arrival. Real topics show it directly: record age equals update age (30.3 hours for both on the oldest messages). |
+| Why the smaller runs passed | They finished before the broker's retention check, which runs every 5 minutes. The nine passing runs therefore proved less than they seemed to. |
+| Fix | `LogAppendTime` on the three topics (D-032), applied to the live topics with `create_topics.py`, and a configuration check that refuses a topic without it. |
+| Mechanism test | A record with a 30 day old timestamp gets the broker's arrival time on a topic built from the configuration. On a control topic without the setting it keeps the old time. Both pass. |
+| After the fix | The benchmarks were run again from the start, with the 200,000 revision run as a check that the loss is gone. |
+
+**What this does not show.**
+- It does not show that no real data was ever lost this way. No update older than 7 days is known to have reached Kafka, but the topics were not scanned for gaps.
+- The segments that already held old-timestamped records were not rewritten, so the setting protects records written from now on.
+- Deletions that have nothing to do with timestamps are still skipped silently by the Spark load.

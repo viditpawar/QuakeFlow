@@ -10,9 +10,23 @@ from pathlib import Path
 
 import yaml
 from confluent_kafka import KafkaException
-from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka.admin import (
+    AdminClient,
+    AlterConfigOpType,
+    ConfigEntry,
+    ConfigResource,
+    NewTopic,
+)
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "kafka-topics.yaml"
+
+
+def topic_config(topic: dict) -> dict[str, str]:
+    """The per-topic settings a topic must have, as Kafka names them."""
+    return {
+        "retention.ms": str(topic["retention_ms"]),
+        "message.timestamp.type": topic["message_timestamp_type"],
+    }
 
 
 def load_topics(path: Path) -> list[NewTopic]:
@@ -23,10 +37,33 @@ def load_topics(path: Path) -> list[NewTopic]:
             t["name"],
             num_partitions=t["partitions"],
             replication_factor=t["replication_factor"],
-            config={"retention.ms": str(t["retention_ms"])},
+            config=topic_config(t),
         )
         for t in spec["topics"]
     ]
+
+
+def align_settings(admin: AdminClient, topic: NewTopic) -> bool:
+    """Make an existing topic's settings match the configuration. Returns False if that failed.
+
+    Settings apply to records written from now on, so changing one never rewrites existing data."""
+    resource = ConfigResource(ConfigResource.Type.TOPIC, topic.topic)
+    current = admin.describe_configs([resource])[resource].result()
+    changes = [
+        ConfigEntry(name, value, incremental_operation=AlterConfigOpType.SET)
+        for name, value in topic.config.items()
+        if current[name].value != value
+    ]
+    if not changes:
+        return True
+    resource = ConfigResource(ConfigResource.Type.TOPIC, topic.topic, incremental_configs=changes)
+    try:
+        admin.incremental_alter_configs([resource])[resource].result()
+    except KafkaException as exc:
+        print(f"FAILED   {topic.topic}: could not set {[c.name for c in changes]}: {exc}", file=sys.stderr)
+        return False
+    print(f"updated  {topic.topic}: {', '.join(f'{c.name}={c.value}' for c in changes)}")
+    return True
 
 
 def main() -> int:
@@ -46,9 +83,10 @@ def main() -> int:
     for topic in topics:
         if topic.topic in existing:
             print(f"exists   {topic.topic}")
+            failed |= not align_settings(admin, topic)
     to_create = [t for t in topics if t.topic not in existing]
     if not to_create:
-        return 0
+        return 1 if failed else 0
 
     for name, future in admin.create_topics(to_create).items():
         try:

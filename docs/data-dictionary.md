@@ -13,7 +13,7 @@ Messages from the `quakeflow.events.validated` Kafka topic. Identity: `(kafka_to
 | Column | Meaning |
 |---|---|
 | kafka_topic, kafka_partition, kafka_offset | Where the message came from |
-| kafka_timestamp | Kafka record time, set to the source update time |
+| kafka_timestamp | When the broker received the record. In rows loaded before 2026-10-16 it is the source update time, because the topics were then stamped by the producer (D-032) |
 | event_id | Kafka key, the USGS event id |
 | record_hash | Fingerprint of the source content (see D-009) |
 | source_updated_at | USGS last-updated time |

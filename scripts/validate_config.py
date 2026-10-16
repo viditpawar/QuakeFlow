@@ -53,6 +53,11 @@ def check_kafka_topics() -> list[str]:
             value = topic.get(key)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 problems.append(f"{path.name}: {name}.{key} must be a positive integer")
+        if topic.get("message_timestamp_type") != "LogAppendTime":
+            problems.append(
+                f"{path.name}: {name}.message_timestamp_type must be LogAppendTime, otherwise Kafka retention "
+                "counts from the USGS update time and can delete a replayed revision before it is read (D-032)"
+            )
     return problems
 
 

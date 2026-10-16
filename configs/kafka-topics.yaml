@@ -1,21 +1,30 @@
 # Kafka topics for QuakeFlow. Single broker, so replication_factor must stay 1.
 # Events are keyed by the USGS event_id so all versions of one earthquake land in one
 # partition and keep their order.
+#
+# message_timestamp_type is LogAppendTime on purpose (D-032). The collector and the Flink job write the USGS
+# update time as the record timestamp, and Kafka measures retention from the record timestamp. With the
+# default (CreateTime) a revision whose update is older than the retention, for example one that is resent
+# or replayed, would be deleted within minutes, before the Spark load reads it. With LogAppendTime the
+# broker stamps each record with the time it arrived, so "7 days" means 7 days after arrival.
 topics:
   - name: quakeflow.events.raw
     purpose: Normalized earthquake observations from the USGS live poller
     partitions: 3
     replication_factor: 1
     retention_ms: 604800000   # 7 days
+    message_timestamp_type: LogAppendTime
 
   - name: quakeflow.events.validated
     purpose: Observations that passed validation, deduplication, and revision detection
     partitions: 3
     replication_factor: 1
     retention_ms: 604800000
+    message_timestamp_type: LogAppendTime
 
   - name: quakeflow.events.dlq
     purpose: Invalid or unprocessable records kept for investigation and replay
     partitions: 1
     replication_factor: 1
     retention_ms: 2592000000  # 30 days
+    message_timestamp_type: LogAppendTime

@@ -129,6 +129,8 @@ class KafkaPublisher:
                 ("change_kind", change.kind.value.encode()),
                 ("record_hash", record_hash.encode()),
             ],
+            # Replaced by the broker's append time (LogAppendTime on the topic, D-032). Kept so a topic without
+            # that setting still carries the update time.
             timestamp=utc_to_epoch_ms(event.source_updated_at),
             on_delivery=lambda error, message: on_delivery(error, message, event=event),
         )

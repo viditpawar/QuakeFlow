@@ -8,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
 from confluent_kafka import Consumer, KafkaException, Producer, TopicPartition
 from confluent_kafka.admin import AdminClient, NewTopic
 
@@ -79,6 +80,12 @@ def revision_id(message: tuple[str, str]) -> tuple[str, str]:
 # --- topics -------------------------------------------------------------------------------
 
 
+def production_topic_config() -> dict[str, str]:
+    """The settings of the real topics that matter to behaviour (D-032), so test topics behave like them."""
+    topics = yaml.safe_load((ROOT / "configs" / "kafka-topics.yaml").read_text(encoding="utf-8"))["topics"]
+    return {"message.timestamp.type": topics[0]["message_timestamp_type"]}
+
+
 def create_topics() -> dict:
     suffix = uuid.uuid4().hex[:8]
     names = {
@@ -88,8 +95,9 @@ def create_topics() -> dict:
         "dlq": f"quakeflow.test.{suffix}.dlq",
     }
     admin = AdminClient({"bootstrap.servers": BOOTSTRAP})
-    new = [NewTopic(names[k], num_partitions=3, replication_factor=1) for k in ("raw", "validated")]
-    new.append(NewTopic(names["dlq"], num_partitions=1, replication_factor=1))
+    config = production_topic_config()
+    new = [NewTopic(names[k], num_partitions=3, replication_factor=1, config=config) for k in ("raw", "validated")]
+    new.append(NewTopic(names["dlq"], num_partitions=1, replication_factor=1, config=config))
     for future in admin.create_topics(new).values():
         future.result()
     return names

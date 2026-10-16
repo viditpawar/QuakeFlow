@@ -43,8 +43,9 @@ FROM (
     FROM raw_messages
 );
 
--- Valid revisions. The original message text is passed through unchanged, and the Kafka
--- record timestamp is set to the source update time, as the collector does.
+-- Valid revisions. The original message text is passed through unchanged. The record timestamp is written
+-- as the source update time, but the topic's LogAppendTime setting replaces it with the time the broker
+-- received the record, so that retention counts from arrival (D-032).
 CREATE TABLE IF NOT EXISTS validated_events_sink (
     event_id STRING,
     payload  STRING,
