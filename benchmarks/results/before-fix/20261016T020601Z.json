@@ -1,0 +1,364 @@
+{
+  "started": "2026-10-16T02:06:01.948031+00:00",
+  "machine": {
+    "os": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.9",
+    "logical_cpus": 16,
+    "docker_cpus": 16,
+    "docker_memory_gb": 7.6,
+    "host_free_gb_at_start": 1.84,
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H"
+  },
+  "sizes": [
+    2000,
+    10000,
+    40000
+  ],
+  "repeats": 3,
+  "runs": [
+    {
+      "size": 2000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 12.3,
+      "produce_s": 0.03,
+      "flink_visible_s": 5.38,
+      "validated_seen": 2000,
+      "ingest_wall_s": 40.8,
+      "ingest_net_s": 24.2,
+      "gold_wall_s": 36.8,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 723,
+          "flink-taskmanager": 550,
+          "kafka": 476,
+          "postgres": 90,
+          "rustfs": 542,
+          "spark-run": 2043
+        },
+        "peak_all_containers_mib": 4832,
+        "min_free_host_gb": 1.72
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 11.3,
+      "produce_s": 0.19,
+      "flink_visible_s": 3.27,
+      "validated_seen": 10000,
+      "ingest_wall_s": 36.3,
+      "ingest_net_s": 19.7,
+      "gold_wall_s": 39.5,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 859,
+          "flink-taskmanager": 614,
+          "kafka": 516,
+          "postgres": 86,
+          "rustfs": 555,
+          "spark-run": 1859
+        },
+        "peak_all_containers_mib": 5010,
+        "min_free_host_gb": 1.78
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 11.3,
+      "produce_s": 0.36,
+      "flink_visible_s": 6.09,
+      "validated_seen": 40000,
+      "ingest_wall_s": 41.1,
+      "ingest_net_s": 24.5,
+      "gold_wall_s": 41.9,
+      "counts": {
+        "bronze": "40000",
+        "versions": "40000",
+        "current": "36000",
+        "rejected": "0",
+        "gold_events": "36000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 860,
+          "flink-taskmanager": 614,
+          "kafka": 558,
+          "postgres": 83,
+          "rustfs": 600,
+          "spark-run": 1839
+        },
+        "peak_all_containers_mib": 4925,
+        "min_free_host_gb": 1.65
+      }
+    },
+    {
+      "size": 2000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 11.6,
+      "produce_s": 0.03,
+      "flink_visible_s": 0.69,
+      "validated_seen": 2000,
+      "ingest_wall_s": 35.6,
+      "ingest_net_s": 19.0,
+      "gold_wall_s": 45.9,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 847,
+          "flink-taskmanager": 585,
+          "kafka": 540,
+          "postgres": 71,
+          "rustfs": 606,
+          "spark-run": 1846
+        },
+        "peak_all_containers_mib": 4936,
+        "min_free_host_gb": 0.76
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 11.8,
+      "produce_s": 0.16,
+      "flink_visible_s": 2.81,
+      "validated_seen": 10000,
+      "ingest_wall_s": 48.7,
+      "ingest_net_s": 32.1,
+      "gold_wall_s": 39.0,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 906,
+          "flink-taskmanager": 626,
+          "kafka": 521,
+          "postgres": 68,
+          "rustfs": 701,
+          "spark-run": 2048
+        },
+        "peak_all_containers_mib": 5029,
+        "min_free_host_gb": 0.46
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 11.4,
+      "produce_s": 0.34,
+      "flink_visible_s": 5.94,
+      "validated_seen": 40000,
+      "ingest_wall_s": 42.6,
+      "ingest_net_s": 26.0,
+      "gold_wall_s": 42.0,
+      "counts": {
+        "bronze": "40000",
+        "versions": "40000",
+        "current": "36000",
+        "rejected": "0",
+        "gold_events": "36000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 905,
+          "flink-taskmanager": 626,
+          "kafka": 536,
+          "postgres": 62,
+          "rustfs": 753,
+          "spark-run": 1834
+        },
+        "peak_all_containers_mib": 4987,
+        "min_free_host_gb": 0.94
+      }
+    },
+    {
+      "size": 2000,
+      "repeat": 2,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 12.2,
+      "produce_s": 0.03,
+      "flink_visible_s": 8.25,
+      "validated_seen": 2000,
+      "ingest_wall_s": 31.1,
+      "ingest_net_s": 14.5,
+      "gold_wall_s": 37.6,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 866,
+          "flink-taskmanager": 614,
+          "kafka": 540,
+          "postgres": 57,
+          "rustfs": 719,
+          "spark-run": 1965
+        },
+        "peak_all_containers_mib": 5036,
+        "min_free_host_gb": 0.83
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 2,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 11.8,
+      "produce_s": 0.14,
+      "flink_visible_s": 8.08,
+      "validated_seen": 10000,
+      "ingest_wall_s": 36.1,
+      "ingest_net_s": 19.5,
+      "gold_wall_s": 38.1,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 873,
+          "flink-taskmanager": 640,
+          "kafka": 530,
+          "postgres": 55,
+          "rustfs": 736,
+          "spark-run": 1864
+        },
+        "peak_all_containers_mib": 4962,
+        "min_free_host_gb": 0.66
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 2,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 11.0,
+      "produce_s": 0.28,
+      "flink_visible_s": 6.48,
+      "validated_seen": 40000,
+      "ingest_wall_s": 40.6,
+      "ingest_net_s": 24.0,
+      "gold_wall_s": 40.0,
+      "counts": {
+        "bronze": "40000",
+        "versions": "40000",
+        "current": "36000",
+        "rejected": "0",
+        "gold_events": "36000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 888,
+          "flink-taskmanager": 618,
+          "kafka": 575,
+          "postgres": 56,
+          "rustfs": 720,
+          "spark-run": 1912
+        },
+        "peak_all_containers_mib": 5017,
+        "min_free_host_gb": 0.54
+      }
+    }
+  ],
+  "spark_startup_s": 16.6,
+  "finished": "2026-10-16T02:33:50.588452+00:00"
+}

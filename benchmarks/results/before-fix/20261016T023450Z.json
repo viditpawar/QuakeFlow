@@ -1,0 +1,47 @@
+{
+  "started": "2026-10-16T02:34:50.272294+00:00",
+  "machine": {
+    "os": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.9",
+    "logical_cpus": 16,
+    "docker_cpus": 16,
+    "docker_memory_gb": 7.6,
+    "host_free_gb_at_start": 0.47,
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H"
+  },
+  "sizes": [
+    200000
+  ],
+  "repeats": 1,
+  "runs": [
+    {
+      "size": 200000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 200000,
+        "events": 180000,
+        "raw_messages": 220000
+      },
+      "flink_submit_s": 11.4,
+      "produce_s": 1.95,
+      "flink_visible_s": 13.58,
+      "validated_seen": 200000,
+      "error": "AssertionError: ingest failed:\n[ingest_live] batch 0: 49999 messages, 0 rejected by Spark\n[ingest_live] batch 1: 42059 messages, 0 rejected by Spark\n[ingest_live] batch 2: 49999 messages, 0 rejected by Spark\n[ingest_live] batch 3: 49998 messages, 0 rejected by Spark\n[ingest_live] batch 4: 8 messages, 0 rejected by Spark\n\nterator(RDD.scala:338)\n\tat org.apache.spark.rdd.MapPartitionsRDD.compute(MapPartitionsRDD.scala:52)\n\tat org.apache.spark.rdd.RDD.computeOrReadCheckpoint(RDD.scala:374)\n\tat org.apache.spark.rdd.RDD.iterator(RDD.scala:338)\n\tat org.apache.spark.rdd.MapPartitionsRDD.compute(MapPar",
+      "correct": false,
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 847,
+          "flink-taskmanager": 677,
+          "kafka": 637,
+          "postgres": 56,
+          "rustfs": 731,
+          "spark-run": 2008
+        },
+        "peak_all_containers_mib": 5219,
+        "min_free_host_gb": 0.52
+      }
+    }
+  ],
+  "spark_startup_s": 16.2,
+  "finished": "2026-10-16T02:39:20.112852+00:00"
+}

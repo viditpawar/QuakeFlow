@@ -1,0 +1,47 @@
+{
+  "started": "2026-10-16T02:39:45.595374+00:00",
+  "machine": {
+    "os": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.9",
+    "logical_cpus": 16,
+    "docker_cpus": 16,
+    "docker_memory_gb": 7.6,
+    "host_free_gb_at_start": 0.97,
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H"
+  },
+  "sizes": [
+    200000
+  ],
+  "repeats": 1,
+  "runs": [
+    {
+      "size": 200000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 200000,
+        "events": 180000,
+        "raw_messages": 220000
+      },
+      "flink_submit_s": 11.6,
+      "produce_s": 1.99,
+      "flink_visible_s": 15.89,
+      "validated_seen": 200000,
+      "error": "AssertionError: ingest failed:\n[ingest_live] batch 0: 49999 messages, 0 rejected by Spark\n[ingest_live] batch 1: 5700 messages, 0 rejected by Spark\n[ingest_live] batch 2: 45181 messages, 0 rejected by Spark\n[ingest_live] batch 3: 49998 messages, 0 rejected by Spark\n[ingest_live] batch 4: 8 messages, 0 rejected by Spark\n\nterator(RDD.scala:338)\n\tat org.apache.spark.rdd.MapPartitionsRDD.compute(MapPartitionsRDD.scala:52)\n\tat org.apache.spark.rdd.RDD.computeOrReadCheckpoint(RDD.scala:374)\n\tat org.ap [...] ls$.tryWithSafeFinally(Utils.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:650)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)\n\tat java.base/java.lang.Thread.run(Thread.java:840)\n26/10/16 02:42:46 WARN KafkaDataConsumer: Some data may be lost. Recovering from the earliest offset: 34880\n26/10/16 02:42:46 WARN KafkaDataConsumer: Some data may be lost. Recovering from the earliest offset: 34992\n26/10/16 02:42:46 WARN KafkaDataConsumer: Some data may be lost. Recovering from the earliest offset: 34941\n26/10/16 02:42:46 WARN KafkaDataConsumer: \nThe current available offset range is MDC(RANGE,AvailableOffsetRange(34992,66828)).\n Offset MDC(OFFSET,33412) is out of range, and records in\n [MDC(OFFSET,33412), MDC(UNTIL_OFFSET,34992)] will be\n skippedMessageWithContext((GroupId: spark-kafka-source-2a321b3c-2ce7-4e2f-918d-2ae9ffa062c2-1767274044-executor, TopicPartition: quakeflow.test.c0bba1f8.validated-0). \nSome data may have been lost because they are not available in Kafka any more; either the\n data was aged out by Kafka or the topic may have been deleted before all the data in the\n topic was processed. If you want your streaming query to fail on such cases, set the source\n option \"failOnDataLoss\" to \"true\".\n    ,{})\n26/10/16 02:42:46 WARN KafkaDataConsumer: \nThe current available offset range is MDC(RANGE,AvailableOffsetRange(34880,66747)).\n Offset MDC(OFFSET,33372) is out of range, and records in\n [MDC(OFFSET,33372), MDC(UNTIL_OFFSET,34880)] will be\n skippedMessageWithContext((GroupId: spark-kafka-source-2a321b3c-2ce7-4e2f-918d-2ae9ffa062c2-1767274044-executor, TopicPartition: quakeflow.test.c0bba1f8.validated-2). \nSome data may have been lost because they are not available in Kafka any more; either the\n data was aged out by Kafka or the topic may have been deleted before all the data in the\n topic was processed. If you want your streaming query to fail on such cases, set the source\n option \"failOnDataLoss\" to \"true\".\n    ,{})\n26/10/16 02:42:46 WARN KafkaDataConsumer: \nThe current available offset range is MDC(RANGE,AvailableOffsetRange(34941,66431)).\n Offset MDC(OFFSET,33214) is out of range, and records in\n [MDC(OFFSET,33214), MDC(UNTIL_OFFSET,34941)] will be\n skippedMessageWithContext((GroupId: spark-kafka-source-2a321b3c-2ce7-4e2f-918d-2ae9ffa062c2-1767274044-executor, TopicPartition: quakeflow.test.c0bba1f8.validated-1). \nSome data may have been lost because they are not available in Kafka any more; either the\n data was aged out by Kafka or the topic may have been deleted before all the data in the\n topic was processed. If you want your streaming query to fail on such cases, set the source\n option \"failOnDataLoss\" to \"true\".\n    ,{})\n26/10/16 02:43:33 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.\n\n",
+      "correct": false,
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 851,
+          "flink-taskmanager": 729,
+          "kafka": 666,
+          "postgres": 58,
+          "rustfs": 726,
+          "spark-run": 2047
+        },
+        "peak_all_containers_mib": 5310,
+        "min_free_host_gb": 0.52
+      }
+    }
+  ],
+  "spark_startup_s": 16.2,
+  "finished": "2026-10-16T02:44:44.381369+00:00"
+}
