@@ -8,7 +8,7 @@ feeds:
     timeout_seconds: 15
 
   # Catches events and revisions the hour feed missed. It cannot catch revisions made
-  # after an event leaves its one-day window; a longer-lookback reconciliation comes later.
+  # after an event leaves its one-day window. The reconciliation DAG (airflow/dags/reconciliation.py) covers that.
   - name: all_day
     url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson
     interval_seconds: 900

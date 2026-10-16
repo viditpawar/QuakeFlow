@@ -202,7 +202,7 @@ These are stated plainly because they affect how far the results can be trusted.
 - **Manual scheduling.** The Spark load and the analytics build run when you run them, and data reaches the lakehouse only then. Nothing restarts the Flink job after a reboot.
 - **At-least-once delivery.** A revision can be sent twice. Repeats are removed by fingerprint, so the results are correct. Flink's own repeat filter forgets after 7 days, so a revision replayed after that passes through Flink again, and the Iceberg merges are what keep it stored once ([architecture](docs/architecture.md#what-is-guaranteed-end-to-end)).
 - **Briefly inconsistent tables during a load.** Each table is a separate commit, so tables can disagree until a load finishes.
-- **Late revisions are not caught yet.** A revision USGS makes after an event leaves the one-day feed is not seen. A scheduled reconciliation job is planned (decision D-003) and not built.
+- **Late revisions are caught only by the reconciliation job.** The live feeds see the last day. Every 6 hours an Airflow DAG asks USGS for everything updated since its watermark (minus a 48-hour overlap) and hands it to the collector (decision D-029). Revisions made between two such runs, or before the platform first saw an event, are still not observed.
 - **No revision history from the catalog.** The USGS catalog returns each event's current state, so a backfill cannot recover earlier revisions.
 - **Analytics describe loaded data only.** Gold reflects what has been loaded, not the whole USGS catalog, and periods loaded with different magnitude filters are not directly comparable.
 - **No performance benchmarks.** The measurements that exist are in the [verification log](docs/verification-log.md).

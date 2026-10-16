@@ -99,3 +99,30 @@ class FdsnClient:
         if not isinstance(features, list):
             raise FeedError("query response is not a GeoJSON FeatureCollection")
         return CatalogWindow(body=body, count=len(features))
+
+    def _updated_params(self, updated_after: datetime, min_magnitude: float | None) -> dict:
+        params = {"updatedafter": _timestamp(updated_after)}
+        if min_magnitude is not None:
+            params["minmagnitude"] = min_magnitude
+        return params
+
+    def count_updated(self, updated_after: datetime, min_magnitude: float | None = None) -> int:
+        """How many events were created or updated after this UTC time, whatever their own time."""
+        text = self._get("count", self._updated_params(updated_after, min_magnitude)).text.strip()
+        try:
+            return int(text)
+        except ValueError:
+            raise FeedError(f"count returned something that is not a number: {text[:100]!r}") from None
+
+    def fetch_updated(self, updated_after: datetime, min_magnitude: float | None = None) -> CatalogWindow:
+        """Download every event created or updated after this UTC time, each as its current revision."""
+        params = {**self._updated_params(updated_after, min_magnitude), "format": "geojson", "orderby": "time-asc"}
+        body = self._get("query", params).content
+        try:
+            document = json.loads(body)
+        except ValueError as exc:
+            raise FeedError(f"query returned invalid JSON: {exc}") from exc
+        features = document.get("features") if isinstance(document, dict) else None
+        if not isinstance(features, list):
+            raise FeedError("query response is not a GeoJSON FeatureCollection")
+        return CatalogWindow(body=body, count=len(features))

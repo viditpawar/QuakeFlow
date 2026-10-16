@@ -286,7 +286,7 @@ def test_a_build_without_recorded_snapshots_is_blocked_and_changes_nothing(lake)
     assert blocked.returncode == 1
     assert "silver_snapshots_recorded" in blocked.stdout + blocked.stderr
     assert published(lake) == before and gold_snapshot(lake) == good
-    status, failed, names = last_log(lake)
+    status, _, names = last_log(lake)
     assert (status, names) == ("blocked", "silver_snapshots_recorded")
 
 

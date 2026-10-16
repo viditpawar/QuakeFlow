@@ -73,6 +73,22 @@ class CollectorMetrics:
             "Revisions detected but not yet confirmed by Kafka.",
             registry=self.registry,
         )
+        self.outbox_batches = Counter(
+            "quakeflow_outbox_batches",
+            "Reconciliation batches from Airflow, by outcome: accepted, published or rejected.",
+            ["outcome"],
+            registry=self.registry,
+        )
+        self.outbox_ready = Gauge(
+            "quakeflow_outbox_ready_batches",
+            "Reconciliation batches waiting to be accepted.",
+            registry=self.registry,
+        )
+        self.outbox_errors = Counter(
+            "quakeflow_outbox_errors",
+            "Times the outbox intake failed with an unexpected error.",
+            registry=self.registry,
+        )
         self.source_freshness = Gauge(
             "quakeflow_source_freshness_seconds",
             "Age of the newest source update seen so far, measured at scrape time. NaN until one is seen.",
@@ -96,6 +112,8 @@ class CollectorMetrics:
             self.polls.labels(feed, "error")
         for kind in ChangeKind:
             self.revisions_detected.labels(kind.value)
+        for outcome in ("accepted", "published", "rejected"):
+            self.outbox_batches.labels(outcome)
 
     def _freshness(self) -> float:
         if self._latest_source_update is None:
@@ -125,6 +143,17 @@ class CollectorMetrics:
         """Kafka confirmed a revision whose source update time was `source_updated_at`."""
         self.revisions_published.inc()
         self.ingestion_latency.observe(max(0.0, self._clock() - source_updated_at.timestamp()))
+
+    def record_intake(self, report, published: int, ready: int) -> None:
+        """Record what one pass over the outbox did. `report` is an ingestion.outbox.IntakeReport."""
+        self.outbox_batches.labels("accepted").inc(len(report.accepted))
+        self.outbox_batches.labels("rejected").inc(report.rejected)
+        self.outbox_batches.labels("published").inc(published)
+        if report.invalid_features:
+            self.invalid_records.labels("reconciliation").inc(report.invalid_features)
+        for change in report.changes:
+            self.revisions_detected.labels(change.kind.value).inc()
+        self.outbox_ready.set(ready)
 
     def set_pending(self, count: int) -> None:
         self.pending_revisions.set(count)

@@ -185,3 +185,51 @@ def test_the_incremental_dag_has_the_agreed_shape():
     assert "mount_tmp_dir=False" in source
     assert "private_environment" in source and "POSTGRES_PASSWORD" in source
     assert not re.search(r"environment=\{[^}]*PASSWORD", source.split("private_environment")[0].split("environment=")[-1])
+
+
+# --- reconciliation ---------------------------------------------------------------------------
+
+from quakeflow_orchestration.watermark import NotAcknowledged, next_watermark
+
+
+def ack(state="accepted", queried_at="2026-10-16T01:00:00+00:00"):
+    return json.dumps({"batch_id": "b", "state": state, "queried_at": queried_at})
+
+
+def test_the_watermark_moves_to_the_query_time_only_after_acceptance():
+    assert next_watermark(None, ack()) == "2026-10-16T01:00:00+00:00"
+    assert next_watermark("2026-10-15T00:00:00+00:00", ack("published")) == "2026-10-16T01:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [ack("rejected"), ack("ready"), None, "", "not json", json.dumps({"state": "accepted"}), json.dumps(["accepted"])],
+)
+def test_the_watermark_stays_put_without_a_real_acceptance(answer):
+    with pytest.raises(NotAcknowledged):
+        next_watermark("2026-10-15T00:00:00+00:00", answer)
+
+
+def test_the_watermark_never_moves_backwards():
+    current = "2026-10-17T00:00:00+00:00"
+    assert next_watermark(current, ack(queried_at="2026-10-16T01:00:00+00:00")) == current
+
+
+def test_the_acknowledgement_is_the_last_line_of_the_task_output():
+    assert next_watermark(None, "some log line\n" + ack()) == "2026-10-16T01:00:00+00:00"
+
+
+def test_the_reconciliation_dag_has_the_agreed_shape():
+    source = (ROOT / "airflow" / "dags" / "reconciliation.py").read_text(encoding="utf-8")
+    assert 'schedule="0 */6 * * *"' in source and "max_active_runs=1" in source and "catchup=False" in source
+    assert "preflight() >> watermark >> fetch >> accepted" in source
+    assert "advance_watermark(accepted.output)" in source, "the watermark must depend on the acceptance"
+    assert "skip_on_exit_code=NOT_PUBLISHED_EXIT_CODE" in source, "slow delivery must not fail the run"
+    assert "mount_tmp_dir=False" in source and "OUTBOX_VOLUME" in source
+
+
+def test_only_the_collector_service_uses_the_outbox_volume_in_compose():
+    users = [n for n in COMPOSE["services"] if any("reconcile-outbox" in m for m in mounts(n))]
+    assert users == ["collector"]
+    assert "reconcile-outbox" in COMPOSE["volumes"]
+    assert "QUAKEFLOW_OUTBOX_DIR=/outbox" in (ROOT / "docker" / "collector.Dockerfile").read_text(encoding="utf-8").replace(" \\n    ", "\n").replace(" ", "")

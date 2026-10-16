@@ -68,6 +68,11 @@ def check_flink_job(url: str, opener: Callable = urllib.request.urlopen) -> Resu
         return Result("flink job", False, f"cannot reach {url} ({error})")
 
 
+def collector_check() -> Result:
+    """The collector's metrics endpoint answers, so something is there to accept reconciliation batches."""
+    return check_http("collector", "http://collector:9108/metrics")
+
+
 def run_preflight(
     checks: list[Callable[[], Result]] | None = None,
     require_flink: bool = True,

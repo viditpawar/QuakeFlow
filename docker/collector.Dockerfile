@@ -9,11 +9,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN --mount=type=bind,source=docker/collector-requirements.txt,target=/tmp/requirements.txt \
     pip install --no-cache-dir --require-hashes --root-user-action=ignore -r /tmp/requirements.txt
 
-# Runs as an unprivileged user. /data is the volume holding the collector's SQLite state. It is created
-# here and owned by that user so a new named volume mounted on it is writable.
+# Runs as an unprivileged user. /data is the volume holding the collector's SQLite state and /outbox the
+# volume shared with Airflow for reconciliation batches. Both are created here and owned by that user so a
+# new named volume mounted on them is writable.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin quakeflow \
-    && mkdir -p /data \
-    && chown 10001:10001 /data
+    && mkdir -p /data /outbox \
+    && chown 10001:10001 /data /outbox
 
 WORKDIR /app
 COPY ingestion ./ingestion
@@ -25,7 +26,8 @@ COPY configs/sources.yaml ./configs/sources.yaml
 # would mean this container itself.
 ENV KAFKA_BOOTSTRAP_SERVERS=kafka:19092 \
     QUAKEFLOW_SOURCES_CONFIG=/app/configs/sources.yaml \
-    QUAKEFLOW_STATE_DB=/data/quakeflow_state.db
+    QUAKEFLOW_STATE_DB=/data/quakeflow_state.db \
+    QUAKEFLOW_OUTBOX_DIR=/outbox
 
 USER 10001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

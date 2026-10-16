@@ -95,6 +95,9 @@ services:
       - "127.0.0.1:9108:9108"   # Prometheus metrics, this machine only
     volumes:
       - collector-state:/data
+      # Reconciliation batches from Airflow (ingestion/outbox.py). The collector takes them over, because it
+      # is the only writer of its state. Airflow's containers use the same volume through DockerOperator.
+      - reconcile-outbox:/outbox
     read_only: true
     tmpfs:
       - /tmp
@@ -368,6 +371,7 @@ services:
 volumes:
   kafka-data:
   collector-state:
+  reconcile-outbox:
   flink-checkpoints:
   postgres-data:
   rustfs-data:

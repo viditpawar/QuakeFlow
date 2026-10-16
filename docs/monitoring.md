@@ -37,6 +37,9 @@ Everything binds to localhost. Measured with the whole stack running, the four m
 | `quakeflow_feed_polls_total` | counter | `feed`, `outcome` | Polls by `ok` or `error`. |
 | `quakeflow_last_successful_poll_timestamp_seconds` | gauge | `feed` | When the feed last polled successfully. |
 | `quakeflow_pending_revisions` | gauge | | Detected but not yet confirmed by Kafka. |
+| `quakeflow_outbox_batches_total` | counter | `outcome` | Reconciliation batches from Airflow: `accepted` (committed to the collector's database), `published` (Kafka confirmed every revision in it) or `rejected`. |
+| `quakeflow_outbox_ready_batches` | gauge | | Batches waiting to be accepted. Stays above 0 if intake is failing. |
+| `quakeflow_outbox_errors_total` | counter | | Unexpected failures of a pass over the outbox. |
 | `quakeflow_source_freshness_seconds` | gauge | | Age of the newest USGS update seen, worked out when scraped, so it keeps growing between polls. |
 | `quakeflow_ingestion_latency_seconds` | histogram | | From a revision's USGS update to Kafka confirming it. |
 | `kafka_consumergroup_lag` | gauge | group, topic, partition | Records a consumer group has not read yet. |

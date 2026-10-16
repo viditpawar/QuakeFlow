@@ -220,3 +220,21 @@ The container reported healthy, using 34 MiB of its 384 MiB limit, as user 10001
 - The restart policy and the unhealthy path of the health check were not exercised on the real container. The health logic is unit-tested, including a loop that has stopped.
 - The new CI checks for the collector image were run locally and have not run on GitHub.
 - The state file is on one volume with no backup.
+
+## 2026-10-16: reconciliation through the outbox
+
+**What was run.** The `reconciliation` DAG against the real USGS catalog, the real collector and Kafka, on the scheduled run and then a manual one.
+
+| Check | Result |
+|---|---|
+| First run | 1,101 events updated in the window. The collector accepted the batch with 684 new revisions (628 events the live feeds never saw, 56 revisions of events it had) and Kafka confirmed all 684. Every task succeeded in under a minute. |
+| Watermark | Equal to the time the batch was queried, set only after the collector's answer was read back. |
+| Second run (the overlap) | The same 1,101 events came back, the collector accepted the batch with 0 new revisions, and nothing was sent twice. |
+| Collector state | `quakeflow_pending_revisions` 0, no ready or rejected files left, one status file per batch. |
+| Unit tests | Damaged files, a crash between committing and answering (repaired without duplicates), one batch ID with different content, accepted versus published, a retried fetch, and a watermark that never moves without an acceptance or backwards. |
+
+**What this does not show.**
+- The failure paths of the DAG were not run live: a stopped collector, a rejected batch and a slow Kafka are covered by unit tests only.
+- The reconciled revisions travel the live path, so in `gold.ingestion_latency` they appear as live revisions with a long delay (up to two days for the first run) and raise its maximum and 95th percentile.
+- A window with more than 20,000 updated events fails the run instead of being split.
+- Nothing alerts yet when the outbox stops being read or the watermark stops moving.

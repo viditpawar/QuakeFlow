@@ -26,12 +26,14 @@ from ingestion.change_detector import Change, ChangeDetector
 from ingestion.kafka_publisher import KafkaPublisher, PublishReport, build_producer
 from ingestion.live.usgs_client import FeedError, UsgsLiveClient
 from ingestion.metrics import CollectorMetrics
+from ingestion.outbox import Intake, Outbox
 from processing.normalize import RejectedRecord, normalize_features
 
 logger = logging.getLogger(__name__)
 
 MIN_INTERVAL_SECONDS = 60  # USGS rebuilds the feeds about once a minute
 BACKOFF_CAP_SECONDS = 1800
+INTAKE_INTERVAL_SECONDS = 15  # how often the outbox is checked for reconciliation batches
 DEFAULT_CONFIG = "configs/sources.yaml"
 DEFAULT_DB = "data/quakeflow_state.db"
 DEFAULT_METRICS_PORT = 9108
@@ -127,7 +129,9 @@ class Poller:
         sleep: Callable[[float], object] | None = None,
         publisher: KafkaPublisher | None = None,
         metrics: CollectorMetrics | None = None,
+        intake: Intake | None = None,
     ):
+        self.intake = intake
         self.feeds = feeds
         self.detector = detector
         self.publisher = publisher
@@ -185,6 +189,25 @@ class Poller:
             latest_source_update=latest,
         )
 
+    def run_intake(self) -> None:
+        """Take over reconciliation batches from Airflow, send what they add, and report what Kafka confirmed.
+
+        A failure here is logged and counted and never stops the feeds."""
+        if self.intake is None:
+            return
+        try:
+            report = self.intake.accept_ready()
+            if self.publisher is not None and report.changes:
+                self.publisher.publish_pending()
+            settled = self.intake.settle()
+            if self.metrics is not None:
+                self.metrics.record_intake(report, len(settled), self.intake.ready_count())
+                self.metrics.set_pending(self.detector.pending_count())
+        except Exception:
+            logger.exception("outbox intake failed")
+            if self.metrics is not None:
+                self.metrics.outbox_errors.inc()
+
     def poll_all_once(self) -> list[PollResult]:
         return [self.poll_feed(feed) for feed in self.feeds]
 
@@ -195,6 +218,7 @@ class Poller:
         failures = {feed.name: 0 for feed in self.feeds}
         polls = 0
         while not stop.is_set():
+            self.run_intake()
             for feed in self.feeds:
                 if next_due[feed.name] > self._clock():
                     continue
@@ -204,7 +228,8 @@ class Poller:
                 polls += 1
                 if max_polls is not None and polls >= max_polls:
                     return
-            sleep(max(0.0, min(next_due.values()) - self._clock()))
+            wait = max(0.0, min(next_due.values()) - self._clock())
+            sleep(min(wait, INTAKE_INTERVAL_SECONDS) if self.intake is not None else wait)
 
 
 def main(
@@ -220,6 +245,11 @@ def main(
         "--no-publish",
         action="store_true",
         help="detect changes only; leave them pending and do not contact Kafka",
+    )
+    parser.add_argument(
+        "--outbox",
+        default=os.getenv("QUAKEFLOW_OUTBOX_DIR", ""),
+        help="directory where Airflow hands over reconciliation batches (off when empty)",
     )
     parser.add_argument(
         "--metrics-port",
@@ -260,7 +290,11 @@ def main(
                 producer_factory(),
                 on_delivered=(lambda e: metrics.record_delivery(e.source_updated_at)) if metrics else None,
             )
-        poller = Poller(feeds, detector, client_factory, publisher=publisher, metrics=metrics)
+        intake = Intake(Outbox(args.outbox), detector) if args.outbox else None
+        if intake is not None:
+            intake.outbox.ensure()
+            logger.info("taking reconciliation batches from %s", args.outbox)
+        poller = Poller(feeds, detector, client_factory, publisher=publisher, metrics=metrics, intake=intake)
         if args.once:
             results = poller.poll_all_once()
             return 0 if all(result.fully_delivered for result in results) else 1

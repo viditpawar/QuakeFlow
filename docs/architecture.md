@@ -91,7 +91,7 @@ Measured on a 16 GB Windows laptop with Docker Desktop, with the whole stack run
 ## What is not built
 
 - **Restarting Flink.** Airflow starts the Spark load and the Gold build every 30 minutes (D-027) and checks that the Flink job is running, but nothing restarts the Flink job after a reboot.
-- **Reconciliation of late revisions.** Revisions USGS makes after an event leaves the one-day feed are not caught (D-003).
+- **Complete history of revisions.** The reconciliation DAG (D-029) finds revisions made after an event left the one-day feed, but the catalog returns only an event's current revision, so a revision that is replaced between two runs is never observed.
 - **High availability and backups.** One broker, one worker, one JobManager, and no backups.
 - **Alert delivery.** Prometheus evaluates the alert rules, but nothing is sent anywhere (D-021).
 - **Direct Flink-to-Iceberg writes.** The alternative route in the design guide.
