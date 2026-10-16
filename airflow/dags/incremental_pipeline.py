@@ -38,7 +38,7 @@ def spark_task(task_id: str, script: str, *arguments: str, **kwargs) -> DockerOp
         mount_tmp_dir=False,  # the default bind-mounts a temp folder from the Airflow container's file system
         pool="quakeflow_spark",  # one Spark container at a time, across all DAGs
         auto_remove="success",  # a failed container stays for "docker logs"
-        mem_limit="2g",
+        mem_limit="3g",  # same as the spark service in docker-compose.yml (D-033)
         environment={
             "POSTGRES_DB": os.getenv("POSTGRES_DB", "iceberg_catalog"),
             "POSTGRES_USER": os.getenv("POSTGRES_USER", "quakeflow"),

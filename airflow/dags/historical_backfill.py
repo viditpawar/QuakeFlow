@@ -60,7 +60,7 @@ def spark_task(task_id: str, script: str, *arguments: str, history_read_only: bo
         "/data/history",
         history_read_only,
         pool="quakeflow_spark",
-        mem_limit="2g",
+        mem_limit="3g",  # same as the spark service in docker-compose.yml (D-033)
         environment={
             "POSTGRES_DB": os.getenv("POSTGRES_DB", "iceberg_catalog"),
             "POSTGRES_USER": os.getenv("POSTGRES_USER", "quakeflow"),

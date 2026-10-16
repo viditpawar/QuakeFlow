@@ -1,0 +1,250 @@
+{
+  "started": "2026-10-16T03:14:01.030245+00:00",
+  "machine": {
+    "os": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.9",
+    "logical_cpus": 16,
+    "docker_cpus": 16,
+    "docker_memory_gb": 7.6,
+    "host_free_gb_at_start": 0.36,
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H"
+  },
+  "sizes": [
+    2000,
+    10000,
+    40000
+  ],
+  "repeats": 2,
+  "runs": [
+    {
+      "size": 2000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 23.0,
+      "produce_s": 0.14,
+      "flink_visible_s": 4.81,
+      "validated_seen": 2000,
+      "ingest_wall_s": 64.5,
+      "ingest_net_s": 40.8,
+      "gold_wall_s": 60.7,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 838,
+          "flink-taskmanager": 604,
+          "kafka": 515,
+          "postgres": 55,
+          "rustfs": 692,
+          "spark-run": 2153
+        },
+        "peak_all_containers_mib": 5123,
+        "min_free_host_gb": 0.34
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 17.7,
+      "produce_s": 0.48,
+      "flink_visible_s": 10.56,
+      "validated_seen": 10000,
+      "ingest_wall_s": 50.8,
+      "ingest_net_s": 27.1,
+      "gold_wall_s": 57.8,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 807,
+          "flink-taskmanager": 681,
+          "kafka": 532,
+          "postgres": 54,
+          "rustfs": 723,
+          "spark-run": 1938
+        },
+        "peak_all_containers_mib": 5034,
+        "min_free_host_gb": 0.43
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 18.2,
+      "produce_s": 1.24,
+      "flink_visible_s": 15.73,
+      "validated_seen": 40000,
+      "ingest_wall_s": 59.0,
+      "ingest_net_s": 35.3,
+      "gold_wall_s": 70.1,
+      "counts": {
+        "bronze": "40000",
+        "versions": "40000",
+        "current": "36000",
+        "rejected": "0",
+        "gold_events": "36000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 828,
+          "flink-taskmanager": 706,
+          "kafka": 578,
+          "postgres": 55,
+          "rustfs": 735,
+          "spark-run": 2343
+        },
+        "peak_all_containers_mib": 5377,
+        "min_free_host_gb": 0.29
+      }
+    },
+    {
+      "size": 2000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 16.4,
+      "produce_s": 0.12,
+      "flink_visible_s": 2.95,
+      "validated_seen": 2000,
+      "ingest_wall_s": 48.4,
+      "ingest_net_s": 24.7,
+      "gold_wall_s": 61.5,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 798,
+          "flink-taskmanager": 658,
+          "kafka": 537,
+          "postgres": 56,
+          "rustfs": 751,
+          "spark-run": 2165
+        },
+        "peak_all_containers_mib": 5145,
+        "min_free_host_gb": 0.23
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 15.2,
+      "produce_s": 0.52,
+      "flink_visible_s": 8.5,
+      "validated_seen": 10000,
+      "ingest_wall_s": 47.8,
+      "ingest_net_s": 24.1,
+      "gold_wall_s": 51.4,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 812,
+          "flink-taskmanager": 709,
+          "kafka": 534,
+          "postgres": 55,
+          "rustfs": 740,
+          "spark-run": 1919
+        },
+        "peak_all_containers_mib": 5151,
+        "min_free_host_gb": 0.47
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 13.2,
+      "produce_s": 0.91,
+      "flink_visible_s": 9.41,
+      "validated_seen": 40000,
+      "ingest_wall_s": 60.4,
+      "ingest_net_s": 36.7,
+      "gold_wall_s": 54.9,
+      "counts": {
+        "bronze": "40000",
+        "versions": "40000",
+        "current": "36000",
+        "rejected": "0",
+        "gold_events": "36000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 782,
+          "flink-taskmanager": 711,
+          "kafka": 558,
+          "postgres": 55,
+          "rustfs": 731,
+          "spark-run": 2396
+        },
+        "peak_all_containers_mib": 5316,
+        "min_free_host_gb": 0.4
+      }
+    }
+  ],
+  "spark_startup_s": 23.7,
+  "finished": "2026-10-16T03:41:03.955728+00:00"
+}

@@ -95,7 +95,7 @@ Each row was tested by injecting the failure and checking the data afterwards. T
 
 ## Resources
 
-Measured on a 16 GB Windows laptop with Docker Desktop, with the whole stack running and idle: Kafka 443 MB, Flink 470 and 629 MB, RustFS 488 MB, PostgreSQL 44 MB, and the four monitoring containers about 230 MB together. That is about 2.3 GB. A Spark job adds up to its 2 GB limit while it runs. Compose profiles let you run a subset.
+Measured on a 16 GB Windows laptop with Docker Desktop, with the whole stack running and idle: Kafka 443 MB, Flink 470 and 629 MB, RustFS 488 MB, PostgreSQL 44 MB, and the four monitoring containers about 230 MB together. That is about 2.3 GB. A Spark job adds up to its 3 GB limit while it runs (D-033). Compose profiles let you run a subset.
 
 ## What is not built
 

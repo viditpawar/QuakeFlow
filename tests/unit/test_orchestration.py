@@ -294,3 +294,11 @@ def test_every_spark_task_is_in_the_one_slot_pool_and_the_pool_is_created():
 def test_the_collector_image_carries_only_the_backfill_from_batch():
     text = (ROOT / "docker" / "collector.Dockerfile").read_text(encoding="utf-8")
     assert "COPY batch/backfill.py" in text and "COPY batch " not in text and "mkdir -p /data /outbox /history" in text
+
+
+def test_the_spark_memory_limit_is_the_same_in_compose_and_both_dags():
+    # The kernel killed the Spark JVM inside a 2 GB limit (D-033). One value, kept in three places.
+    limit = COMPOSE["services"]["spark"]["mem_limit"]
+    assert limit == "3g"
+    for dag in ("incremental_pipeline.py", "historical_backfill.py"):
+        assert f'mem_limit="{limit}"' in (ROOT / "airflow" / "dags" / dag).read_text(encoding="utf-8"), dag

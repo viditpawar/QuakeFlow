@@ -275,7 +275,7 @@ The container reported healthy, using 34 MiB of its 384 MiB limit, as user 10001
 
 ## 2026-10-16: the benchmark found a silent loss, and the fix
 
-**What happened.** The first benchmark ran nine correct runs up to 40,000 revisions, then a single run of 200,000 failed. Spark's log said that offset ranges at the start of two validated partitions "are out of range ... will be skipped", because Kafka had deleted them while Spark was reading. The kept result files are in `benchmarks/results/before-fix/`.
+**What happened.** The first benchmark ran nine correct runs up to 40,000 revisions, then a single run of 200,000 failed, twice. Each time the Spark container was also killed for memory (D-033), which is a second, separate cause. Spark's log said that offset ranges at the start of two validated partitions "are out of range ... will be skipped", because Kafka had deleted them while Spark was reading. The kept result files are in `benchmarks/results/before-fix/`.
 
 | Check | Result |
 |---|---|

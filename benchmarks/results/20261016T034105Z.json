@@ -1,0 +1,58 @@
+{
+  "started": "2026-10-16T03:41:05.700272+00:00",
+  "machine": {
+    "os": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.9",
+    "logical_cpus": 16,
+    "docker_cpus": 16,
+    "docker_memory_gb": 7.6,
+    "host_free_gb_at_start": 0.63,
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H"
+  },
+  "sizes": [
+    200000
+  ],
+  "repeats": 1,
+  "runs": [
+    {
+      "size": 200000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 200000,
+        "events": 180000,
+        "raw_messages": 220000
+      },
+      "flink_submit_s": 18.2,
+      "produce_s": 5.12,
+      "flink_visible_s": 20.69,
+      "validated_seen": 200000,
+      "ingest_wall_s": 167.9,
+      "ingest_net_s": 149.2,
+      "gold_wall_s": 64.1,
+      "counts": {
+        "bronze": "200000",
+        "versions": "200000",
+        "current": "180000",
+        "rejected": "0",
+        "gold_events": "180000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 810,
+          "flink-taskmanager": 704,
+          "kafka": 632,
+          "postgres": 54,
+          "rustfs": 752,
+          "spark-run": 2668
+        },
+        "peak_all_containers_mib": 5456,
+        "min_free_host_gb": 0.16
+      }
+    }
+  ],
+  "spark_startup_s": 18.7,
+  "finished": "2026-10-16T03:49:31.186356+00:00"
+}

@@ -1,0 +1,265 @@
+{
+  "started": "2026-10-16T02:47:37.448542+00:00",
+  "machine": {
+    "os": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.9",
+    "logical_cpus": 16,
+    "docker_cpus": 16,
+    "docker_memory_gb": 7.6,
+    "host_free_gb_at_start": 0.61,
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H"
+  },
+  "sizes": [
+    2000,
+    10000,
+    40000
+  ],
+  "repeats": 3,
+  "runs": [
+    {
+      "size": 2000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 12.1,
+      "produce_s": 0.03,
+      "flink_visible_s": 2.91,
+      "validated_seen": 2000,
+      "ingest_wall_s": 31.9,
+      "ingest_net_s": 15.1,
+      "gold_wall_s": 37.1,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 769,
+          "flink-taskmanager": 649,
+          "kafka": 515,
+          "postgres": 58,
+          "rustfs": 699,
+          "spark-run": 1922
+        },
+        "peak_all_containers_mib": 4968,
+        "min_free_host_gb": 0.56
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 12.4,
+      "produce_s": 0.14,
+      "flink_visible_s": 9.51,
+      "validated_seen": 10000,
+      "ingest_wall_s": 35.0,
+      "ingest_net_s": 18.2,
+      "gold_wall_s": 37.5,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 860,
+          "flink-taskmanager": 736,
+          "kafka": 536,
+          "postgres": 56,
+          "rustfs": 733,
+          "spark-run": 1993
+        },
+        "peak_all_containers_mib": 5037,
+        "min_free_host_gb": 0.49
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 0,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 11.1,
+      "produce_s": 0.33,
+      "flink_visible_s": 6.05,
+      "validated_seen": 40000,
+      "ingest_wall_s": 41.4,
+      "ingest_net_s": 24.6,
+      "gold_wall_s": 39.5,
+      "counts": {
+        "bronze": "40000",
+        "versions": "40000",
+        "current": "36000",
+        "rejected": "0",
+        "gold_events": "36000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 863,
+          "flink-taskmanager": 727,
+          "kafka": 568,
+          "postgres": 57,
+          "rustfs": 731,
+          "spark-run": 2048
+        },
+        "peak_all_containers_mib": 5131,
+        "min_free_host_gb": 0.41
+      }
+    },
+    {
+      "size": 2000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 11.9,
+      "produce_s": 0.02,
+      "flink_visible_s": 2.7,
+      "validated_seen": 2000,
+      "ingest_wall_s": 32.8,
+      "ingest_net_s": 16.0,
+      "gold_wall_s": 43.6,
+      "counts": {
+        "bronze": "2000",
+        "versions": "2000",
+        "current": "1800",
+        "rejected": "0",
+        "gold_events": "1800",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 903,
+          "flink-taskmanager": 646,
+          "kafka": 521,
+          "postgres": 56,
+          "rustfs": 739,
+          "spark-run": 1827
+        },
+        "peak_all_containers_mib": 5012,
+        "min_free_host_gb": 0.45
+      }
+    },
+    {
+      "size": 10000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 10000,
+        "events": 9000,
+        "raw_messages": 11000
+      },
+      "flink_submit_s": 11.9,
+      "produce_s": 0.14,
+      "flink_visible_s": 3.36,
+      "validated_seen": 10000,
+      "ingest_wall_s": 40.6,
+      "ingest_net_s": 23.8,
+      "gold_wall_s": 45.4,
+      "counts": {
+        "bronze": "10000",
+        "versions": "10000",
+        "current": "9000",
+        "rejected": "0",
+        "gold_events": "9000",
+        "gold_status": "promoted"
+      },
+      "correct": true,
+      "wrong": {},
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 854,
+          "flink-taskmanager": 725,
+          "kafka": 535,
+          "postgres": 57,
+          "rustfs": 726,
+          "spark-run": 2045
+        },
+        "peak_all_containers_mib": 5244,
+        "min_free_host_gb": 1.7
+      }
+    },
+    {
+      "size": 40000,
+      "repeat": 1,
+      "expected": {
+        "revisions": 40000,
+        "events": 36000,
+        "raw_messages": 44000
+      },
+      "flink_submit_s": 13.0,
+      "produce_s": 0.42,
+      "flink_visible_s": 11.39,
+      "validated_seen": 40000,
+      "error": "AssertionError: ingest failed:\n[ingest_live] batch 0: 40000 messages, 0 rejected by Spark\n\n===============================\n26/10/16 03:04:37 INFO SparkContext: Submitted application: quakeflow-ingest-live\n26/10/16 03:04:37 INFO ResourceProfile: Default ResourceProfile created, executor resources: Map(cores -> name: cores, amount: 1, script: , vendor: , memory -> name: memory, amount: 1024, script: , vendor: , offHeap -> name: offHeap, amount: 0, script: , vendor: ), task resources: Map(cpus -> n [...] k groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY; RPC SSL disabled\n26/10/16 03:04:38 INFO Utils: Successfully started service 'sparkDriver' on port 38141.\n26/10/16 03:04:38 INFO SparkEnv: Registering MapOutputTracker\n26/10/16 03:04:38 INFO SparkEnv: Registering BlockManagerMaster\n26/10/16 03:04:38 INFO BlockManagerMasterEndpoint: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information\n26/10/16 03:04:38 INFO BlockManagerMasterEndpoint: BlockManagerMasterEndpoint up\n26/10/16 03:04:38 INFO SparkEnv: Registering BlockManagerMasterHeartbeat\n26/10/16 03:04:38 INFO DiskBlockManager: Created local directory at /tmp/blockmgr-12379729-1207-4749-95a1-dbc53d2f2c31\n26/10/16 03:04:38 INFO SparkEnv: Registering OutputCommitCoordinator\n26/10/16 03:04:38 INFO SecurityManager: Changing view acls to: spark\n26/10/16 03:04:38 INFO SecurityManager: Changing modify acls to: spark\n26/10/16 03:04:38 INFO SecurityManager: Changing view acls groups to: spark\n26/10/16 03:04:38 INFO SecurityManager: Changing modify acls groups to: spark\n26/10/16 03:04:38 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: spark groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY; RPC SSL disabled\n26/10/16 03:04:38 INFO Executor: Starting executor ID driver on host 22b761bc1e39\n26/10/16 03:04:38 INFO Executor: OS info Linux, 6.18.54.1-microsoft-standard-WSL2, amd64\n26/10/16 03:04:38 INFO Executor: Java version 17.0.19\n26/10/16 03:04:38 INFO Executor: Starting executor with user classpath (userClassPathFirst = false): ''\n26/10/16 03:04:38 INFO Executor: Created or updated repl class loader org.apache.spark.util.MutableURLClassLoader@243023c0 for default.\n26/10/16 03:04:38 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 38351.\n26/10/16 03:04:38 INFO NettyBlockTransferService: Server created on 22b761bc1e39:38351\n26/10/16 03:04:38 INFO BlockManager: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy\n26/10/16 03:04:38 INFO BlockManagerMaster: Registering BlockManager BlockManagerId(driver, 22b761bc1e39, 38351, None)\n26/10/16 03:04:38 INFO BlockManagerMasterEndpoint: Registering block manager 22b761bc1e39:38351 with 434.4 MiB RAM, BlockManagerId(driver, 22b761bc1e39, 38351, None)\n26/10/16 03:04:38 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, 22b761bc1e39, 38351, None)\n26/10/16 03:04:38 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, 22b761bc1e39, 38351, None)\n26/10/16 03:04:41 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.\n26/10/16 03:05:14 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.\n\n",
+      "correct": false,
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 788,
+          "flink-taskmanager": 717,
+          "kafka": 570,
+          "postgres": 56,
+          "rustfs": 744,
+          "spark-run": 1752
+        },
+        "peak_all_containers_mib": 4992,
+        "min_free_host_gb": 1.75
+      }
+    },
+    {
+      "size": 2000,
+      "repeat": 2,
+      "expected": {
+        "revisions": 2000,
+        "events": 1800,
+        "raw_messages": 2200
+      },
+      "flink_submit_s": 12.2,
+      "produce_s": 0.05,
+      "flink_visible_s": 7.58,
+      "validated_seen": 2000,
+      "error": "AssertionError: ingest failed:\n[ingest_live] batch 0: 2000 messages, 0 rejected by Spark\n\n===============================\n26/10/16 03:06:41 INFO SparkContext: Submitted application: quakeflow-ingest-live\n26/10/16 03:06:41 INFO ResourceProfile: Default ResourceProfile created, executor resources: Map(cores -> name: cores, amount: 1, script: , vendor: , memory -> name: memory, amount: 1024, script: , vendor: , offHeap -> name: offHeap, amount: 0, script: , vendor: ), task resources: Map(cpus -> na [...] k groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY; RPC SSL disabled\n26/10/16 03:06:41 INFO Utils: Successfully started service 'sparkDriver' on port 46381.\n26/10/16 03:06:41 INFO SparkEnv: Registering MapOutputTracker\n26/10/16 03:06:41 INFO SparkEnv: Registering BlockManagerMaster\n26/10/16 03:06:41 INFO BlockManagerMasterEndpoint: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information\n26/10/16 03:06:41 INFO BlockManagerMasterEndpoint: BlockManagerMasterEndpoint up\n26/10/16 03:06:41 INFO SparkEnv: Registering BlockManagerMasterHeartbeat\n26/10/16 03:06:41 INFO DiskBlockManager: Created local directory at /tmp/blockmgr-aa76ed1f-062d-4fb7-8a9c-46fde4bca29c\n26/10/16 03:06:41 INFO SparkEnv: Registering OutputCommitCoordinator\n26/10/16 03:06:41 INFO SecurityManager: Changing view acls to: spark\n26/10/16 03:06:41 INFO SecurityManager: Changing modify acls to: spark\n26/10/16 03:06:41 INFO SecurityManager: Changing view acls groups to: spark\n26/10/16 03:06:41 INFO SecurityManager: Changing modify acls groups to: spark\n26/10/16 03:06:41 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: spark groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY; RPC SSL disabled\n26/10/16 03:06:42 INFO Executor: Starting executor ID driver on host bd6604099e85\n26/10/16 03:06:42 INFO Executor: OS info Linux, 6.18.54.1-microsoft-standard-WSL2, amd64\n26/10/16 03:06:42 INFO Executor: Java version 17.0.19\n26/10/16 03:06:42 INFO Executor: Starting executor with user classpath (userClassPathFirst = false): ''\n26/10/16 03:06:42 INFO Executor: Created or updated repl class loader org.apache.spark.util.MutableURLClassLoader@664341e3 for default.\n26/10/16 03:06:42 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 43737.\n26/10/16 03:06:42 INFO NettyBlockTransferService: Server created on bd6604099e85:43737\n26/10/16 03:06:42 INFO BlockManager: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy\n26/10/16 03:06:42 INFO BlockManagerMaster: Registering BlockManager BlockManagerId(driver, bd6604099e85, 43737, None)\n26/10/16 03:06:42 INFO BlockManagerMasterEndpoint: Registering block manager bd6604099e85:43737 with 434.4 MiB RAM, BlockManagerId(driver, bd6604099e85, 43737, None)\n26/10/16 03:06:42 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, bd6604099e85, 43737, None)\n26/10/16 03:06:42 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, bd6604099e85, 43737, None)\n26/10/16 03:06:45 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.\n26/10/16 03:07:09 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.\n\n",
+      "correct": false,
+      "resources": {
+        "peak_container_mib": {
+          "flink-jobmanager": 853,
+          "flink-taskmanager": 645,
+          "kafka": 554,
+          "postgres": 55,
+          "rustfs": 713,
+          "spark-run": 2046
+        },
+        "peak_all_containers_mib": 5219,
+        "min_free_host_gb": 0.94
+      }
+    }
+  ],
+  "spark_startup_s": 16.8
+}

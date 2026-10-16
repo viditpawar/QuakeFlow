@@ -241,7 +241,9 @@ services:
       - ./configs/quality.yaml:/workspace/configs/quality.yaml:ro
       - ./data/history:/data/history:ro   # windows written by batch/backfill.py
       - spark-checkpoints:/checkpoints
-    mem_limit: 2g
+    # 3g, not 2g: the kernel killed the Spark JVM at about 1.7 GB resident inside a 2 GB limit, four times (D-033).
+    # The DAGs use the same value (airflow/dags/*.py), and a unit test keeps them equal.
+    mem_limit: 3g
 
   # Monitoring. Start with: docker compose --profile monitoring up -d
   # Prometheus is at http://localhost:9090 and Grafana at http://localhost:3000

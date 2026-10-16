@@ -2,20 +2,15 @@
 
 What is done, what is in progress, what is next, and what is deferred. Update this file at the end of every step. For context see [decisions.md](decisions.md) section 1, and for the rules see [.rules.md](.rules.md). Status as of 2026-10-16.
 
-## Now: resume here
+## Now: what is left
 
-The benchmark work is **on hold**. Do these in order when told to continue.
+Everything the assistant had to build is built, tested and documented. What is left is the owner's:
 
-1. **See whether the rerun finished.** It was started in the background as two invocations: `--sizes 2000 10000 40000 --repeats 3`, then `--sizes 200000 --repeats 1`. Results are in `benchmarks/results/*.json` (the three files in `before-fix/` are the first, pre-fix run and are kept as evidence). A file with a `finished` field is complete. If nothing is running and a run is missing, rerun the missing sizes.
-2. **Unpause the DAGs.** They were paused so the benchmark had the machine to itself:
-   ```powershell
-   foreach ($d in "incremental_pipeline","reconciliation","flink_health") { docker exec quakeflow-airflow-scheduler airflow dags unpause $d }
-   ```
-3. **Investigate the failed runs.** In the rerun, two runs failed (40,000 repeat 2 and 2,000 repeat 3, out of the 7 seen when the work was put on hold). The first: the Spark `ingest_live` container loaded its batch and then exited non-zero, and the cause was not captured. Spark's peak memory was 1,752 MiB of its 2,048 MiB limit, so it does not look like a memory kill, but that is not established. The harness now writes a failed container's full output and exit code to `benchmarks/results/failures/`. Run 40,000 a few more times (`python -m benchmarks.run_benchmark --sizes 40000 --repeats 3`) and read that file. Do not publish numbers until this is explained or clearly reported as an intermittent failure with its rate.
-4. **Check the 200,000 run.** It exists to confirm that the retention loss (D-032) is gone: it deliberately uses 2025 update times, which lost data before the fix. If it passes, that is the regression evidence. If it fails, read `failures/` before anything else.
-5. **Put the real numbers into the docs.** `docs/benchmarks.md` currently holds the pre-fix table and prose, and must be rewritten from the new result files (`python -m benchmarks.run_benchmark --summarize <file>`). Keep the caveats section, add the 200,000 result and any failure rate, and correct the run time (the first full run took 28 minutes, the document says 38).
-6. **Apply the README refresh.** A full draft is in `data/drafts/README.next.md` (git-ignored, delete it afterwards). It has two placeholders: `{{BENCHMARK_SUMMARY}}`, to be replaced with the compact table (`--summarize` prints it), and `{{UNIT_COUNT}}`. Check the "Performance" paragraph against the final numbers. The current `README.md` is the old version, written before Airflow.
-7. **Commit.** Uncommitted: the D-032 fix and its tests, `benchmarks/`, `docs/benchmarks.md`, the new top-level documents, the `decisions.md` restructure.
+1. **Commit and push** what is uncommitted (the commands were given with the last step).
+2. **Screenshots and a short screen recording** for the demo: the Grafana operations dashboard with data in it, the Airflow DAG list with run history, a green `incremental_pipeline` graph, a `reconciliation` run, the Flink job RUNNING with checkpoints, a Spark ingest log line showing a count. A recording could show the Flink job being cancelled and `flink_health` bringing it back within 5 minutes.
+3. **Delete the draft** `data/drafts/README.next.md` if it is still there (it is git-ignored and already applied to `README.md`).
+
+Optional: a third benchmark repeat per size would tighten the ranges (`docs/benchmarks.md`, "What these runs do not show").
 
 ## Done
 
@@ -37,6 +32,7 @@ The benchmark work is **on hold**. Do these in order when told to continue.
 | Roadmap 1 (cont.) | Backfill DAG and verification (D-030), Flink health DAG (D-031) | `airflow/dags/`, `batch/verify_history.py`, `flink/resubmit.sh` |
 | Found by benchmark | Kafka retention counted from the USGS update time (D-032). Fixed, tested, applied to the live topics | `configs/kafka-topics.yaml`, `tests/integration/test_topic_timestamps.py` |
 | Project documents | prd, architecture, design, tasks, rules, restructured decisions | repository root |
+| Roadmap 4 and 5 | Benchmark suite and results, README rewritten for Airflow, versioned Gold and the benchmarks. Found and fixed the Spark memory limit (D-033) | `benchmarks/`, `docs/benchmarks.md`, `README.md` |
 
 Evidence for each is in `docs/verification-log.md`, with what it does not show.
 
@@ -44,8 +40,8 @@ Evidence for each is in `docs/verification-log.md`, with what it does not show.
 
 | # | Step | Owner | State |
 |---|---|---|---|
-| 4 | Benchmark the pipeline: synthetic load, honest ranges, no fabricated numbers | assistant | Suite built and run. Rerun after the D-032 fix is in progress, one run failed unexplained. Docs hold pre-fix numbers. See "Now" |
-| 5 | Demo polish: README refresh and benchmark summary | assistant | README draft written, waiting for the final numbers |
+| 4 | Benchmark the pipeline: synthetic load, honest ranges, no fabricated numbers | assistant | **Done.** Six runs plus a 200,000 check, all correct. The benchmarks found two defects, both fixed (D-032, D-033) |
+| 5 | Demo polish: README refresh and benchmark summary | assistant | **Done** |
 | 5 | Demo polish: screenshots of Grafana, Airflow and Flink, a short screen recording | **the owner** | Not started. Suggested shots below |
 
 Suggested screenshots: the Grafana operations dashboard with data in it, the Airflow DAG list with run history, a green `incremental_pipeline` graph, the `reconciliation` run, the Flink job RUNNING with checkpoints, the Spark ingest log line showing a count. A recording could show the Flink job being cancelled and `flink_health` bringing it back.
