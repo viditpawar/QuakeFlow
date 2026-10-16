@@ -86,6 +86,13 @@ def test_a_compose_variable_missing_from_env_example_is_reported(fake_root):
     assert problems == [".env.example does not mention FORGOTTEN, which docker-compose.yml reads"]
 
 
+def test_a_variable_escaped_for_the_shell_is_not_reported(fake_root):
+    # $${NAME} is expanded by the shell inside the container, not read by Compose from .env.
+    (fake_root / "docker-compose.yml").write_text('x: ${KNOWN:-1}\ntest: pg_isready -U $${HOSTNAME}\n')
+    (fake_root / ".env.example").write_text("KNOWN=1\n")
+    assert validate.check_env_example_covers_compose() == []
+
+
 def test_an_env_file_that_is_not_ignored_is_reported(fake_root):
     (fake_root / ".env").write_text("SECRET=1\n")
     (fake_root / ".gitignore").write_text("data/\n")

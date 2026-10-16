@@ -26,3 +26,6 @@ checkpoints/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Generated credentials (scripts/airflow_setup.py)
+secrets/

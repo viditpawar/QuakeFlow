@@ -1,5 +1,43 @@
 name: quakeflow
 
+# Settings shared by the Airflow services. Secrets (database password, keys) are not here: they are in
+# secrets/airflow.env, which scripts/airflow_setup.py generates and git ignores.
+x-airflow-common: &airflow-common
+  image: quakeflow/airflow:3.3.2
+  build:
+    context: .
+    dockerfile: docker/airflow.Dockerfile
+  profiles: ["orchestration"]
+  env_file:
+    - path: secrets/airflow.env
+      required: false
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    # The Simple auth manager is meant for development. It is acceptable here only because Airflow is bound
+    # to this machine and has one user. The password is generated, not a default (D-027).
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: quakeflow:admin
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /run/airflow/passwords.json
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__CORE__PARALLELISM: "2"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # What the DAGs hand on to the Spark containers they start. The same values as the spark service.
+    POSTGRES_DB: ${POSTGRES_DB:-iceberg_catalog}
+    POSTGRES_USER: ${POSTGRES_USER:-quakeflow}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quakeflow-local-password}
+    S3_ACCESS_KEY: ${S3_ACCESS_KEY:-quakeflow}
+    S3_SECRET_KEY: ${S3_SECRET_KEY:-quakeflow-local-secret}
+    WAREHOUSE_BUCKET: ${WAREHOUSE_BUCKET:-warehouse}
+    PUSHGATEWAY_URL: ${PUSHGATEWAY_URL:-}
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags:ro
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
 services:
   kafka:
     image: apache/kafka:3.9.0
@@ -264,6 +302,69 @@ services:
     mem_limit: 96m
     restart: unless-stopped
 
+  # Orchestration with Apache Airflow. Needs PostgreSQL (batch profile) for its metadata:
+  #   python scripts/airflow_setup.py        once, creates the secrets and its database
+  #   docker compose --profile batch --profile orchestration up -d
+  # The UI is at http://127.0.0.1:8080. Only the scheduler has the Docker socket, because it is the
+  # component that runs the tasks that start the platform's containers. See D-027 for what that means.
+  airflow-migrate:
+    <<: *airflow-common
+    container_name: quakeflow-airflow-migrate
+    command: ["db", "migrate"]
+    restart: "no"
+    mem_limit: 768m
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: quakeflow-airflow-apiserver
+    command: ["api-server"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - airflow-logs:/opt/airflow/logs
+      # Only the API server reads the login, and the Simple auth manager rewrites the file at start-up,
+      # so this mount cannot be read-only.
+      - ./secrets/airflow_passwords.json:/run/airflow/passwords.json
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      airflow-migrate:
+        condition: service_completed_successfully
+    mem_limit: 1536m
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: quakeflow-airflow-scheduler
+    command: ["scheduler"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - airflow-logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock   # only here: this component starts the task containers
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      airflow-migrate:
+        condition: service_completed_successfully
+    mem_limit: 1536m
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: quakeflow-airflow-dag-processor
+    command: ["dag-processor"]
+    depends_on:
+      airflow-migrate:
+        condition: service_completed_successfully
+    mem_limit: 1536m
+
 volumes:
   kafka-data:
   collector-state:
@@ -273,3 +374,4 @@ volumes:
   spark-checkpoints:
   prometheus-data:
   grafana-data:
+  airflow-logs:

@@ -93,7 +93,9 @@ def check_application_configs() -> list[str]:
 def check_env_example_covers_compose() -> list[str]:
     """Every ${VARIABLE} that docker-compose.yml reads should be documented in .env.example."""
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    used = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", compose))
+    # A doubled dollar sign, $${NAME}, is Compose's escape for a variable the shell inside the container expands,
+    # so it is not something Compose reads from .env.
+    used = set(re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", compose))
     documented = {
         line.split("=", 1)[0].strip()
         for line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()

@@ -51,5 +51,16 @@ RUN mkdir -p /checkpoints && chown spark:spark /checkpoints
 # live in an image layer or in the repository.
 COPY --chmod=755 docker/spark-entrypoint.sh /opt/quakeflow/spark-entrypoint.sh
 
+# The jobs and their SQL are part of the image, so a container started by Airflow (which cannot know host
+# paths) runs the same code. The compose service still bind-mounts these folders over the copies, so edits
+# on the host show up without a rebuild when you run jobs by hand.
+# (--chmod on COPY also applies to the folders it creates, which would leave this one unreadable.)
+RUN mkdir -p /opt/quakeflow/conf && chmod 755 /opt/quakeflow /opt/quakeflow/conf
+COPY --chmod=644 iceberg/catalog/spark-defaults.conf.template /opt/quakeflow/conf/spark-defaults.conf.template
+COPY iceberg/sql /workspace/iceberg/sql
+COPY batch /workspace/batch
+COPY configs/quality.yaml /workspace/configs/quality.yaml
+
 USER spark
+ENV PYTHONPATH=/workspace
 ENTRYPOINT ["/opt/quakeflow/spark-entrypoint.sh"]
