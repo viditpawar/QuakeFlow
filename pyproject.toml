@@ -47,5 +47,5 @@ markers = ["integration: needs the Docker stack (Kafka, Flink) to be running"]
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.6",
+    "ruff>=0.17.1",
 ]
