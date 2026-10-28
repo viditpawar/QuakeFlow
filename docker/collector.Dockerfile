@@ -1,6 +1,6 @@
 # The USGS collector as a container. Base image pinned by version and digest, and every Python package
 # pinned and verified against the hashes in collector-requirements.txt (generated from the .in file).
-FROM python:3.11.17-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
+FROM python:3.15.0-slim-bookworm@sha256:0e019bbdfb5d9874cb2389f1c2884b64aa2ac97c99960b5bc521cef978c0617d
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
