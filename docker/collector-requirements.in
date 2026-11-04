@@ -4,6 +4,6 @@
 #     "pip install --quiet pip-tools && pip-compile --quiet --generate-hashes --allow-unsafe collector-requirements.in -o collector-requirements.txt"
 confluent-kafka>=2.5
 prometheus-client>=0.21
-pydantic>=2.7
+pydantic>=2.14.2
 pyyaml>=6.0
 requests>=2.32
